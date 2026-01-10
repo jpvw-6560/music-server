@@ -1,0 +1,21 @@
+{
+  "name": "music-server",
+  "version": "1.0.0",
+  "description": "Serveur de musique façon MediaMonkey",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "scan": "node src/scanner.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "multer": "^2.0.2",
+    "music-metadata": "^7.14.0",
+    "mysql2": "^3.16.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 Music Server</title>
+    <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Barre de navigation -->
+        <nav class="sidebar">
+            <div class="logo">🎵 Music Server</div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-view="library">📚 Bibliothèque</li>
+                <li class="nav-item" data-view="artists">🎤 Artistes</li>
+                <li class="nav-item" data-view="albums">💿 Albums</li>
+                <li class="nav-item" data-view="tracks">🎵 Pistes</li>
+                <li class="nav-item" data-view="playlists">📋 Playlists</li>
+                <li class="nav-item" data-view="queue">🎼 File d'attente</li>
+                <li class="nav-item" data-view="stats">📊 Statistiques</li>
+                <li class="nav-item" data-view="scan">🔍 Scanner</li>
+            </ul>
+            
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="🔍 Rechercher...">
+            </div>
+        </nav>
+
+        <!-- Contenu principal -->
+        <main class="main-content">
+            <div id="content-view"></div>
+        </main>
+
+        <!-- Lecteur audio en bas -->
+        <div class="player">
+            <!-- Barre de progression en haut -->
+            <div class="player-progress">
+                <span id="currentTime">0:00</span>
+                <input type="range" id="progressBar" class="progress-bar" min="0" max="100" value="0">
+                <span id="duration">0:00</span>
+            </div>
+            
+            <!-- Contrôles principaux -->
+            <div class="player-main">
+                <div class="player-info">
+                    <img id="playerCover" src="" alt="" class="player-cover">
+                    <div class="player-text">
+                        <div id="playerTitle" class="player-title">Aucune lecture</div>
+                        <div id="playerArtist" class="player-artist">-</div>
+                    </div>
+                </div>
+
+                <div class="player-controls">
+                    <button id="btnPrev" class="control-btn">◀◀</button>
+                    <button id="btnPlay" class="control-btn play-btn">▶</button>
+                    <button id="btnNext" class="control-btn">▶▶</button>
+                </div>
+
+                <div class="player-volume">
+                    <span>🔊</span>
+                    <input type="range" id="volumeBar" class="volume-bar" min="0" max="100" value="80">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <audio id="audioPlayer" preload="metadata"></audio>
+
+    <script src="app.js"></script>
+</body>
+</html>
