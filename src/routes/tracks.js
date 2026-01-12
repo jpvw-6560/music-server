@@ -17,4 +17,7 @@ router.get('/', TrackController.getAll);
 // GET /api/tracks/:id
 router.get('/:id', TrackController.getById);
 
+// PUT /api/tracks/:id
+router.put('/:id', TrackController.update);
+
 module.exports = router;

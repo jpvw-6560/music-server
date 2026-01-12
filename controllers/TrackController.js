@@ -78,6 +78,29 @@ class TrackController {
       res.status(500).json({ error: 'Erreur serveur' });
     }
   }
+
+  /**
+   * PUT /api/tracks/:id
+   * Met à jour une piste
+   */
+  static async update(req, res) {
+    try {
+      const id = req.params.id;
+      const { title, artist_id, album_id } = req.body;
+      
+      const updated = await Track.update(id, { title, artist_id, album_id });
+      
+      if (!updated) {
+        return res.status(404).json({ error: 'Piste non trouvée' });
+      }
+      
+      const track = await Track.getById(id);
+      res.json(track);
+    } catch (err) {
+      console.error('Erreur mise à jour piste:', err);
+      res.status(500).json({ error: 'Erreur serveur' });
+    }
+  }
 }
 
 module.exports = TrackController;

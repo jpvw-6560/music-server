@@ -130,6 +130,41 @@ class Track {
   }
 
   /**
+   * Met à jour une piste par ID
+   * @param {number} id
+   * @param {Object} data
+   * @returns {Promise<boolean>}
+   */
+  static async update(id, data) {
+    const fields = [];
+    const values = [];
+    
+    if (data.title !== undefined) {
+      fields.push('title = ?');
+      values.push(data.title);
+    }
+    if (data.artist_id !== undefined) {
+      fields.push('artist_id = ?');
+      values.push(data.artist_id);
+    }
+    if (data.album_id !== undefined) {
+      fields.push('album_id = ?');
+      values.push(data.album_id);
+    }
+    
+    if (fields.length === 0) {
+      return false;
+    }
+    
+    values.push(id);
+    const [result] = await db.pool.query(
+      `UPDATE tracks SET ${fields.join(', ')} WHERE id = ?`,
+      values
+    );
+    return result.affectedRows > 0;
+  }
+
+  /**
    * Incrémente le compteur de lecture
    * @param {number} trackId
    * @returns {Promise<void>}

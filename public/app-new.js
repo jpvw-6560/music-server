@@ -1,65 +1,44 @@
 // public/app.js
 // Application frontend du serveur de musique
-
+//
 const API_BASE = '/api';
 
-/* ===========================
-   NOTIFICATIONS (MODULE PRO)
-   =========================== */
-(() => {
-  const ICONS = { info:'ℹ️', success:'✅', warning:'⚠️', error:'❌' };
-  const ANIMATION_DURATION = 350;
-
-  function getContainer() {
-    let container = document.getElementById('notification-container');
-    if(!container){
-      container = document.createElement('div');
-      container.id = 'notification-container';
-      document.body.prepend(container);
-    }
-    return container;
-  }
-
-  function createNotification(msg, type) {
-    const notif = document.createElement('div');
-    notif.className = `notification notification-${type}`;
-    // Forcer positionnement en haut à droite
-    notif.style.cssText = 'position: fixed !important; top: 20px !important; bottom: auto !important; right: 20px !important; z-index: 99999 !important;';
-    const icon = document.createElement('span'); 
-    icon.className='notification-icon'; 
-    icon.textContent=ICONS[type];
-    const text = document.createElement('span'); 
-    text.className='notification-message'; 
-    text.textContent = msg;
-    notif.append(icon, text);
-    return notif;
-  }
-
-  // Fonction globale pour afficher les notifications
-  window.showNotification = (msg, type='info', duration=5000) => {
-    if(!ICONS[type]) type='info';
-    const container = getContainer();
-    const notif = createNotification(msg, type);
-    container.appendChild(notif);
-    
-    console.log('📍 Notification créée, type:', type, 'durée:', duration);
-    console.log('📍 Position:', notif.style.cssText);
-    
-    requestAnimationFrame(() => notif.classList.add('show'));
-    
-    const timer = setTimeout(() => { 
-      notif.classList.remove('show'); 
-      setTimeout(() => notif.remove(), ANIMATION_DURATION); 
-    }, duration);
-    
-    // Clic pour fermer
-    notif.addEventListener('click', () => { 
-      clearTimeout(timer); 
-      notif.classList.remove('show'); 
-      setTimeout(() => notif.remove(), ANIMATION_DURATION); 
-    });
+/**
+ * Affiche une notification moderne (toast)
+ * @param {string} message - Le message à afficher
+ * @param {string} type - Type : 'info', 'success', 'warning', 'error' (défaut: 'info')
+ * @param {number} duration - Durée d'affichage en ms (défaut: 3000)
+ */
+function showNotification(message, type = 'info', duration = 30000) {
+  const icons = {
+    info: 'ℹ️',
+    success: '✅',
+    warning: '⚠️',
+    error: '❌'
   };
-})();
+  
+  const notification = document.createElement('div');
+  notification.className = `notification notification-${type}`;
+  // Forcer le positionnement EN HAUT à droite avec styles inline
+  notification.style.cssText = 'position: fixed !important; top: 20px !important; bottom: auto !important; right: 20px !important; z-index: 99999 !important;';
+  notification.innerHTML = `
+    <span class="notification-icon">${icons[type]}</span>
+    <span class="notification-message">${message}</span>
+  `;
+  
+  console.log('📍 Notification créée avec styles:', notification.style.cssText);
+  document.body.appendChild(notification);
+  console.log('📍 Position calculée:', window.getComputedStyle(notification).top, window.getComputedStyle(notification).bottom);
+  
+  // Animation d'entrée
+  setTimeout(() => notification.classList.add('show'), 10);
+  
+  // Suppression automatique
+  setTimeout(() => {
+    notification.classList.remove('show');
+    setTimeout(() => document.body.removeChild(notification), 300);
+  }, duration);
+}
 
 // État global
 const state = {
@@ -858,12 +837,12 @@ function renderTrackItem(track, index) {
     const isCurrentTrack = state.currentTrack && state.currentTrack.id === track.id;
     return `
         <div class="track-item ${isCurrentTrack ? 'track-playing' : ''}" data-track-id="${track.id}">
-            <button class="track-edit-btn" title="Modifier le titre">✏️</button>
             <div class="track-number">${track.track_number || index + 1}</div>
             <div class="track-title" data-editable="title">${track.title}</div>
             <div class="track-artist">${track.artist_name || '-'}</div>
             <div class="track-album">${track.album_title || '-'}</div>
             <div class="track-duration">${duration}</div>
+            <button class="track-edit-btn" title="Modifier le titre">✏️</button>
         </div>
     `;
 }
