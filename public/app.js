@@ -11,7 +11,8 @@ const state = {
     currentIndex: -1,
     isPlaying: false,
     repeat: false, // Mode répétition
-    shuffle: false // Mode aléatoire
+    shuffle: false, // Mode aléatoire
+    continuous: false // Lecture continue (passer automatiquement à la suivante)
 };
 
 // Sauvegarder l'état dans localStorage
@@ -90,6 +91,40 @@ const progressBar = document.getElementById('progressBar');
 const volumeBar = document.getElementById('volumeBar');
 const searchInput = document.getElementById('searchInput');
 const contentView = document.getElementById('content-view');
+
+// Gérer la fin de la piste pour passer à la suivante automatiquement
+audioPlayer.addEventListener('ended', () => {
+    console.log('🎵 Piste terminée, passage à la suivante...');
+    playNext();
+});
+
+function playNext() {
+    // Vérifier si la lecture continue est activée
+    if (!state.continuous) {
+        console.log('⏸ Lecture terminée (mode lecture unique)');
+        state.isPlaying = false;
+        btnPlay.textContent = '▶';
+        return;
+    }
+    
+    // Mode lecture continue activé
+    if (state.currentIndex < state.queue.length - 1) {
+        playFromQueue(state.currentIndex + 1);
+    } else if (state.repeat) {
+        // Si mode répétition, recommencer au début
+        playFromQueue(0);
+    } else {
+        console.log('✅ Fin de la file d\'attente');
+        state.isPlaying = false;
+        btnPlay.textContent = '▶';
+    }
+}
+
+function playPrevious() {
+    if (state.currentIndex > 0) {
+        playFromQueue(state.currentIndex - 1);
+    }
+}
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', async () => {
@@ -265,6 +300,11 @@ async function loadTracks(page = 1, searchQuery = '') {
     
     contentView.innerHTML = `
         <h2 class="section-title">🎵 Toutes les pistes ${searchQuery ? '(Recherche)' : `(${total})`}</h2>
+        <div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button id="btnContinuous" class="btn ${state.continuous ? 'btn-active' : ''}" onclick="toggleContinuous()">🔁 Lecture continue</button>
+            <button id="btnShuffle" class="btn ${state.shuffle ? 'btn-active' : ''}" onclick="toggleShuffle()">🎲 Aléatoire</button>
+            ${state.queue.length > 0 ? `<span style="color: #1db954; margin-left: 8px;">📋 ${state.queue.length} pistes en file</span>` : ''}
+        </div>
         <div style="margin-bottom: 16px;">
             <input type="text" 
                    id="trackSearch" 
@@ -758,8 +798,9 @@ async function loadAlbumDetail(albumId) {
 // Rendu d'un élément de piste
 function renderTrackItem(track, index) {
     const duration = track.duration ? formatTime(track.duration) : '-';
+    const isCurrentTrack = state.currentTrack && state.currentTrack.id === track.id;
     return `
-        <div class="track-item" data-track-id="${track.id}">
+        <div class="track-item ${isCurrentTrack ? 'track-playing' : ''}" data-track-id="${track.id}">
             <div class="track-number">${track.track_number || index + 1}</div>
             <div class="track-title">${track.title}</div>
             <div class="track-artist">${track.artist_name || '-'}</div>
@@ -772,8 +813,14 @@ function renderTrackItem(track, index) {
 // Lecteur audio
 function attachTrackListeners() {
     document.querySelectorAll('.track-item').forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', async () => {
             const trackId = item.dataset.trackId;
+            
+            // Si la queue est vide, charger toutes les pistes d'abord
+            if (state.queue.length === 0) {
+                await loadAllTracksToQueue();
+            }
+            
             playTrack(trackId);
         });
         
@@ -809,8 +856,26 @@ async function playTrack(trackId, addToQueue = true) {
     // Highlight dans la queue
     updateQueueHighlight();
     
+    // Mettre à jour le surlignage dans la liste des pistes
+    updateTrackListHighlight();
+    
     // Sauvegarder l'état
     savePlayerState();
+}
+
+function updateTrackListHighlight() {
+    // Retirer la classe active de toutes les pistes
+    document.querySelectorAll('.track-item').forEach(item => {
+        item.classList.remove('track-playing');
+    });
+    
+    // Ajouter la classe active à la piste en cours
+    if (state.currentTrack) {
+        const currentItem = document.querySelector(`.track-item[data-track-id="${state.currentTrack.id}"]`);
+        if (currentItem) {
+            currentItem.classList.add('track-playing');
+        }
+    }
 }
 
 function playFromQueue(index) {
@@ -850,6 +915,92 @@ async function playAllArtist(artistId) {
     if (data.tracks.length > 0) {
         playTrack(data.tracks[0].id, false);
         console.log(`▶️ Lecture de ${data.tracks.length} titres de l'artiste`);
+    }
+}
+
+// Basculer le mode lecture continue
+function toggleContinuous() {
+    state.continuous = !state.continuous;
+    updatePlayModeButtons();
+    console.log(state.continuous ? '✅ Lecture continue activée' : '❌ Lecture continue désactivée');
+}
+
+// Basculer le mode aléatoire
+async function toggleShuffle() {
+    state.shuffle = !state.shuffle;
+    
+    // Si on active l'aléatoire et qu'il y a déjà une queue, la mélanger
+    if (state.shuffle && state.queue.length > 0) {
+        // Sauvegarder la piste en cours
+        const currentTrack = state.currentTrack;
+        
+        // Mélanger la queue
+        for (let i = state.queue.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [state.queue[i], state.queue[j]] = [state.queue[j], state.queue[i]];
+        }
+        
+        // Remettre la piste en cours en position actuelle
+        if (currentTrack) {
+            state.currentIndex = state.queue.findIndex(t => t.id === currentTrack.id);
+        }
+        
+        console.log(`🎲 Mode aléatoire activé - ${state.queue.length} pistes mélangées`);
+    } else if (!state.shuffle) {
+        console.log('🔢 Mode aléatoire désactivé - ordre normal');
+        // Note: on ne remet pas dans l'ordre original, seulement pour les prochaines lectures
+    }
+    
+    updatePlayModeButtons();
+}
+
+// Charger toutes les pistes dans la queue (utilisé au démarrage)
+async function loadAllTracksToQueue() {
+    const url = `${API_BASE}/tracks?page=1&limit=10000`;
+    const data = await fetch(url).then(r => r.json());
+    const tracks = Array.isArray(data) ? data : (data.tracks || []);
+    
+    if (tracks.length === 0) {
+        console.log('⚠️ Aucune piste à charger');
+        return;
+    }
+    
+    state.queue = [...tracks];
+    
+    if (state.shuffle) {
+        // Mélanger la queue
+        for (let i = state.queue.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [state.queue[i], state.queue[j]] = [state.queue[j], state.queue[i]];
+        }
+    }
+    
+    console.log(`📋 ${tracks.length} pistes chargées dans la queue`);
+    
+    // Mettre à jour l'affichage
+    if (state.currentView === 'library') {
+        updatePlayModeButtons();
+    }
+}
+
+function updatePlayModeButtons() {
+    const btnContinuous = document.getElementById('btnContinuous');
+    const btnShuffle = document.getElementById('btnShuffle');
+    
+    if (btnContinuous) {
+        if (state.continuous) {
+            btnContinuous.classList.add('btn-active');
+        } else {
+            btnContinuous.classList.remove('btn-active');
+        }
+    }
+    
+    if (btnShuffle) {
+        if (state.shuffle) {
+            btnShuffle.classList.add('btn-active');
+        } else {
+            btnShuffle.classList.remove('btn-active');
+        }
     }
 }
 
