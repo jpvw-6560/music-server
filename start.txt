@@ -1,0 +1,56 @@
+========================================
+SERVEUR MUSIQUE - MUSIC_SERVER
+========================================
+
+Répertoire:
+cd Documents/node_appli/music_server
+
+Démarrage:
+npm start &
+
+Démarrage en mode développement (avec auto-reload):
+npm run dev &
+
+Scanner la bibliothèque musicale:
+npm run scan
+
+Arrêt:
+pkill -f 'node.*music_server'
+
+Vérifier le serveur:
+ss -tlnp | grep :3001
+lsof -i :3001
+
+Accès:
+http://localhost:3001/
+
+Interface principale:
+http://localhost:3001/index.html
+
+========================================
+FONCTIONNALITÉS PRINCIPALES
+========================================
+
+API REST disponible:
+- GET  /api/artists          → Liste des artistes
+- GET  /api/albums           → Liste des albums
+- GET  /api/tracks           → Liste des pistes
+- GET  /api/playlists        → Liste des playlists
+- GET  /api/search?q=...     → Recherche globale
+- POST /api/scan/start       → Lancer un scan
+- GET  /stream/:trackId      → Streamer une piste audio
+
+========================================
+CONFIGURATION
+========================================
+
+Fichiers de configuration:
+- config/config.js           → Port, chemins musicaux, formats
+- config/database.js         → Paramètres base de données
+- config/settings.json       → Paramètres supplémentaires
+
+Chemins musicaux:
+Éditer config/config.js pour ajouter vos répertoires de musique
+
+Formats supportés:
+.mp3, .flac, .m4a, .ogg, .wav, .wma, .aac
