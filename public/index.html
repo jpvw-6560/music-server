@@ -4,14 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🎵 Music Server</title>
-    <link rel="stylesheet" href="style.css?v=8">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+    <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
     <div id="notification-container"></div>
+    
+    <!-- Bouton menu mobile -->
+    <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+    
+    <!-- Overlay mobile -->
+    <div class="mobile-overlay" id="mobileOverlay"></div>
+    
+    <!-- Modale de confirmation -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-icon">⚠️</span>
+                <h2 class="modal-title">Confirmation</h2>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button id="confirmCancel" class="modal-btn modal-btn-cancel">Annuler</button>
+                <button id="confirmOk" class="modal-btn modal-btn-confirm">OK</button>
+            </div>
+        </div>
+    </div>
+    
     <div class="app-container">
         <!-- Barre de navigation -->
-        <nav class="sidebar">
-            <div class="logo">🎵 Music Server</div>
+        <nav class="sidebar" id="sidebar">
+            <div class="logo">
+                <span>🎵 Music Server</span>
+                <span class="close-menu-btn" id="closeMenuBtn">✕</span>
+            </div>
             <ul class="nav-menu">
                 <li class="nav-item" data-view="artists">🎤 Artistes</li>
                 <li class="nav-item" data-view="albums">💿 Albums</li>
@@ -20,6 +48,7 @@
                 <li class="nav-item" data-view="queue">🎼 File d'attente</li>
                 <li class="nav-item" data-view="stats">📊 Statistiques</li>
                 <li class="nav-item" data-view="scan">🔍 Scanner</li>
+                <li class="nav-item" data-view="settings">⚙️ Paramètres</li>
             </ul>
             
             <div class="search-box">
@@ -29,6 +58,9 @@
 
         <!-- Contenu principal -->
         <main class="main-content">
+            <div class="top-bar">
+                <button id="fullscreenBtn" class="top-bar-btn" type="button" title="Afficher en plein écran" aria-label="Afficher en plein écran">⛶</button>
+            </div>
             <div id="content-view"></div>
         </main>
 
@@ -44,7 +76,7 @@
             <!-- Contrôles principaux -->
             <div class="player-main">
                 <div class="player-info">
-                    <img id="playerCover" src="" alt="" class="player-cover">
+                    <div id="playerCover" class="player-cover">💿</div>
                     <div class="player-text">
                         <div id="playerTitle" class="player-title">Aucune lecture</div>
                         <div id="playerArtist" class="player-artist">-</div>
@@ -67,6 +99,6 @@
 
     <audio id="audioPlayer" preload="metadata"></audio>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=20260914-1"></script>
 </body>
 </html>

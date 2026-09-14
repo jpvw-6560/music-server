@@ -100,7 +100,7 @@ class Artist {
    */
   static async getTracks(artistId) {
     const [rows] = await db.pool.query(
-      'SELECT * FROM tracks WHERE artist_id = ? ORDER BY title',
+      'SELECT *, SUBSTRING_INDEX(file_path, \'/\', -1) as file_name FROM tracks WHERE artist_id = ? ORDER BY SUBSTRING_INDEX(file_path, \'/\', -1)',
       [artistId]
     );
     return rows;

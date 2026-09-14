@@ -14,11 +14,12 @@ class Track {
     const offset = (page - 1) * limit;
     
     const [tracks] = await db.pool.query(`
-      SELECT t.*, ar.name as artist_name, al.title as album_title
+      SELECT t.*, ar.name as artist_name, al.title as album_title,
+             SUBSTRING_INDEX(t.file_path, '/', -1) as file_name
       FROM tracks t
       LEFT JOIN artists ar ON t.artist_id = ar.id
       LEFT JOIN albums al ON t.album_id = al.id
-      ORDER BY t.title
+      ORDER BY ar.name, t.title
       LIMIT ? OFFSET ?
     `, [limit, offset]);
     
@@ -41,16 +42,18 @@ class Track {
     const searchTerm = `%${query.toLowerCase()}%`;
     
     const [tracks] = await db.pool.query(`
-      SELECT t.*, ar.name as artist_name, al.title as album_title
+      SELECT t.*, ar.name as artist_name, al.title as album_title,
+             SUBSTRING_INDEX(t.file_path, '/', -1) as file_name
       FROM tracks t
       LEFT JOIN artists ar ON t.artist_id = ar.id
       LEFT JOIN albums al ON t.album_id = al.id
       WHERE LOWER(t.title) LIKE ? 
          OR LOWER(ar.name) LIKE ? 
          OR LOWER(al.title) LIKE ?
-      ORDER BY t.title
+         OR LOWER(SUBSTRING_INDEX(t.file_path, '/', -1)) LIKE ?
+      ORDER BY ar.name, t.title
       LIMIT 500
-    `, [searchTerm, searchTerm, searchTerm]);
+    `, [searchTerm, searchTerm, searchTerm, searchTerm]);
     
     return {
       tracks,
@@ -65,7 +68,8 @@ class Track {
    */
   static async getById(id) {
     const [rows] = await db.pool.query(`
-      SELECT t.*, ar.name as artist_name, al.title as album_title
+      SELECT t.*, ar.name as artist_name, al.title as album_title,
+             SUBSTRING_INDEX(t.file_path, '/', -1) as file_name
       FROM tracks t
       LEFT JOIN artists ar ON t.artist_id = ar.id
       LEFT JOIN albums al ON t.album_id = al.id

@@ -2,6 +2,27 @@
 SERVEUR MUSIQUE - MUSIC_SERVER
 ========================================
 
+========================================
+WORKFLOW DEV/PROD (PRIORITAIRE)
+========================================
+
+1. ARRÊTER LE SERVEUR DISTANT (nipogi-srv):
+   ssh jpvw@192.168.129.50 "sudo pkill -f 'node.*server.js' || true"
+   # (nécessite le mot de passe sudo)
+
+2. DÉVELOPPER EN LOCAL (jpvw-dev):
+   cd ~/Documents/node_appli/music_server
+   npm start
+   # Tester sur http://localhost:3012
+
+3. SYNCHRONISER VERS PRODUCTION:
+   rsync -av --exclude 'node_modules' ~/Documents/node_appli/music_server/ jpvw@192.168.129.50:~/music_server/
+
+4. REDÉMARRER LE SERVEUR DISTANT:
+   ssh jpvw@192.168.129.50 "cd ~/music_server && npm start &"
+
+========================================
+
 Répertoire:
 cd Documents/node_appli/music_server
 
@@ -54,3 +75,34 @@ Chemins musicaux:
 
 Formats supportés:
 .mp3, .flac, .m4a, .ogg, .wav, .wma, .aac
+========================================
+APRÈS REDÉMARRAGE DU SERVEUR
+========================================
+
+Si le streaming retourne 404 après un redémarrage:
+
+1. Sur 192.168.129.30 (PC avec disque Seagate):
+   sudo exportfs -ra
+   sudo exportfs -v
+
+2. Sur 192.168.129.50 (serveur):
+   sudo mount -t nfs4 192.168.129.30:'/media/jpvw/Seagate_1T/Music JPVW' '/media/jpvw/Seagate_1T/Music JPVW' -o ro,soft
+   ls '/media/jpvw/Seagate_1T/Music JPVW' | head -5
+   cd /home/jpvw/docker-apps/music_server
+   docker-compose restart
+
+3. Tester:
+   curl -I http://192.168.129.50:3012/stream/2685
+
+========================================
+⚠️ IMPORTANT : Ne jamais lancer le serveur Node.js en direct sur nipogi-srv si Docker est actif sur le même port (3012).
+Pour la mise en production, il faut :
+- Synchroniser l'application modifiée depuis jpvw-dev vers nipogi-srv
+- Redémarrer le conteneur Docker (et non le serveur Node.js en direct)
+
+Exemple :
+cd /home/jpvw/docker-apps/music_server
+sudo docker-compose restart
+
+# Un seul service doit utiliser le port 3012 à la fois !
+========================================

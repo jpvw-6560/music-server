@@ -77,7 +77,8 @@ class Playlist {
   static async getTracks(playlistId) {
     const [rows] = await db.pool.query(`
       SELECT t.*, ar.name as artist_name, al.title as album_title,
-             pt.position, pt.added_at
+             pt.position, pt.added_at,
+             SUBSTRING_INDEX(t.file_path, '/', -1) as file_name
       FROM playlist_tracks pt
       JOIN tracks t ON pt.track_id = t.id
       LEFT JOIN artists ar ON t.artist_id = ar.id

@@ -1,11 +1,13 @@
 const mysql = require('mysql2/promise');
+require('dotenv').config();
 
 // Pool principal (avec database)
 const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'Jpvw1953!',
-    database: 'music_library',
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'music_db',
+    port: process.env.DB_PORT || 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
@@ -15,9 +17,10 @@ const pool = mysql.createPool({
 async function initDatabase() {
     // Connexion sans database pour la création
     const initPool = mysql.createPool({
-        host: 'localhost',
-        user: 'root',
-        password: 'Jpvw1953!',
+        host: process.env.DB_HOST || 'localhost',
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || '',
+        port: process.env.DB_PORT || 3306,
         waitForConnections: true,
         connectionLimit: 1
     });
@@ -25,9 +28,11 @@ async function initDatabase() {
     const connection = await initPool.getConnection();
     
     try {
+        const dbName = process.env.DB_NAME || 'music_db';
+        
         // Création de la base si elle n'existe pas
-        await connection.query(`CREATE DATABASE IF NOT EXISTS music_library`);
-        await connection.query(`USE music_library`);
+        await connection.query(`CREATE DATABASE IF NOT EXISTS ${dbName}`);
+        await connection.query(`USE ${dbName}`);
         
         // Table des artistes
         await connection.query(`
@@ -128,7 +133,9 @@ async function initDatabase() {
         console.error('❌ Erreur initialisation base de données:', error);
         throw error;
     } finally {
-        connection.release();        await initPool.end();    }
+        connection.release();
+        await initPool.end();
+    }
 }
 
 module.exports = { pool, initDatabase };

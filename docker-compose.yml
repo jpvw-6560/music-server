@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  music_server:
+    build: .
+    container_name: music_server
+    restart: unless-stopped
+    ports:
+      - "3011:3001"
+    volumes:
+      - /home/jpvw/Musique:/music:ro
+      - /mnt/seagate:/seagate:ro
+      - ./config/settings.json:/app/config/settings.json
+      # Ajoutez d'autres répertoires de musique si nécessaire
+      # - /autre/chemin/musique:/music2:ro
+    environment:
+      - PORT=3001
+      - DB_HOST=192.168.129.50
+      - DB_USER=root
+      - DB_PASSWORD=Jpvw1953!
+      - DB_NAME=music_db
+      - DB_PORT=3306
+      - MUSIC_PATH=/music
+    networks:
+      - music_network
+
+networks:
+  music_network:
+    driver: bridge

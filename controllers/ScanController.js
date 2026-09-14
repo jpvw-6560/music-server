@@ -176,7 +176,7 @@ class ScanController {
     static async browse(req, res) {
         try {
             const { path: browsePath } = req.query;
-            const targetPath = browsePath || require('os').homedir();
+            const targetPath = browsePath || '/';  // Commencer à la racine au lieu de homedir
             
             // Lire le contenu du répertoire
             const items = await fs.readdir(targetPath, { withFileTypes: true });
@@ -199,6 +199,38 @@ class ScanController {
                 directories
             });
         } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+    
+    /**
+     * POST /api/scan/clear
+     * Vide complètement la base de données (pistes, albums, artistes, playlists)
+     */
+    static async clearDatabase(req, res) {
+        try {
+            const db = require('../config/database');
+            
+            // Désactiver temporairement les contraintes de clés étrangères
+            await db.pool.query('SET FOREIGN_KEY_CHECKS = 0');
+            
+            // Vider toutes les tables dans l'ordre
+            await db.pool.query('TRUNCATE TABLE playlist_tracks');
+            await db.pool.query('TRUNCATE TABLE playlists');
+            await db.pool.query('TRUNCATE TABLE tracks');
+            await db.pool.query('TRUNCATE TABLE albums');
+            await db.pool.query('TRUNCATE TABLE artists');
+            
+            // Réactiver les contraintes de clés étrangères
+            await db.pool.query('SET FOREIGN_KEY_CHECKS = 1');
+            
+            console.log('🗑️ Base de données vidée avec succès');
+            res.json({ 
+                success: true, 
+                message: 'Base de données vidée avec succès' 
+            });
+        } catch (error) {
+            console.error('❌ Erreur lors du vidage de la base:', error);
             res.status(500).json({ error: error.message });
         }
     }

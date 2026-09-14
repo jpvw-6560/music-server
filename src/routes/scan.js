@@ -23,4 +23,7 @@ router.post('/paths/remove', ScanController.removePath);
 // GET /api/scan/browse
 router.get('/browse', ScanController.browse);
 
+// POST /api/scan/clear
+router.post('/clear', ScanController.clearDatabase);
+
 module.exports = router;

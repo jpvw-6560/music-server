@@ -61,6 +61,107 @@ const API_BASE = '/api';
   };
 })();
 
+/* ===========================
+   MODALES DE CONFIRMATION
+   =========================== */
+function showConfirm(message, isDanger = false) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirmModal');
+        const messageEl = document.getElementById('confirmMessage');
+        const cancelBtn = document.getElementById('confirmCancel');
+        const okBtn = document.getElementById('confirmOk');
+        
+        messageEl.textContent = message;
+        
+        // Appliquer le style danger si nécessaire
+        if (isDanger) {
+            okBtn.classList.add('danger');
+        } else {
+            okBtn.classList.remove('danger');
+        }
+        
+        modal.classList.add('show');
+        
+        function close(result) {
+            modal.classList.remove('show');
+            cancelBtn.removeEventListener('click', onCancel);
+            okBtn.removeEventListener('click', onOk);
+            resolve(result);
+        }
+        
+        function onCancel() { close(false); }
+        function onOk() { close(true); }
+        
+        cancelBtn.addEventListener('click', onCancel);
+        okBtn.addEventListener('click', onOk);
+        
+        // Fermer avec Escape
+        function onEscape(e) {
+            if (e.key === 'Escape') {
+                close(false);
+                document.removeEventListener('keydown', onEscape);
+            }
+        }
+        document.addEventListener('keydown', onEscape);
+    });
+}
+
+/* ===========================
+   MODALE AVEC INPUT
+   =========================== */
+function showPrompt(message, defaultValue = '') {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal show';
+        
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="modal-icon">✏️</span>
+                    <h2 class="modal-title">Saisie</h2>
+                </div>
+                <div class="modal-body">
+                    <p style="margin-bottom: 15px;">${message}</p>
+                    <input type="text" id="promptInput" value="${defaultValue}" 
+                           style="width: 100%; padding: 10px; background: rgba(255,255,255,0.1); 
+                                  border: 1px solid #444; border-radius: 6px; color: #fff; 
+                                  font-size: 1em; outline: none;">
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn modal-btn-cancel">Annuler</button>
+                    <button class="modal-btn modal-btn-confirm">OK</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const input = modal.querySelector('#promptInput');
+        const cancelBtn = modal.querySelector('.modal-btn-cancel');
+        const okBtn = modal.querySelector('.modal-btn-confirm');
+        
+        // Focus sur l'input
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 100);
+        
+        function close(value) {
+            modal.remove();
+            resolve(value);
+        }
+        
+        cancelBtn.addEventListener('click', () => close(null));
+        okBtn.addEventListener('click', () => close(input.value.trim()));
+        
+        // Validation avec Enter
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') close(input.value.trim());
+            if (e.key === 'Escape') close(null);
+        });
+    });
+}
+
 // État global
 const state = {
     currentView: 'tracks',
@@ -118,14 +219,15 @@ async function restorePlayerState() {
                 }, { once: true });
                 
                 // Mettre à jour l'affichage
-                document.getElementById('playerTitle').textContent = state.currentTrack.title;
+                document.getElementById('playerTitle').textContent = state.currentTrack.file_name || state.currentTrack.title;
                 document.getElementById('playerArtist').textContent = state.currentTrack.artist_name || '-';
+                document.getElementById('playerCover').textContent = '💿';
                 
                 // Ne pas démarrer automatiquement, juste charger
                 state.isPlaying = false;
                 btnPlay.textContent = '▶';
                 
-                console.log(`📀 Piste restaurée: ${state.currentTrack.title} à ${Math.floor(playerState.currentTime)}s`);
+                console.log(`📀 Piste restaurée: ${state.currentTrack.file_name || state.currentTrack.title} à ${Math.floor(playerState.currentTime)}s`);
             }
         } catch (error) {
             console.error('Erreur restauration état:', error);
@@ -149,6 +251,7 @@ const progressBar = document.getElementById('progressBar');
 const volumeBar = document.getElementById('volumeBar');
 const searchInput = document.getElementById('searchInput');
 const contentView = document.getElementById('content-view');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
 
 // Gérer la fin de la piste pour passer à la suivante automatiquement
 audioPlayer.addEventListener('ended', () => {
@@ -193,7 +296,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Restaurer l'état du lecteur
     await restorePlayerState();
     
-    loadView('library');
+    loadView('tracks');
     audioPlayer.volume = volumeBar.value / 100;
     
     // Sauvegarder avant de fermer la page
@@ -204,14 +307,40 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Event listeners
 function initEventListeners() {
+    initFullscreenButton();
+
     // Navigation
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
             e.target.classList.add('active');
             loadView(e.target.dataset.view);
+            
+            // Fermer le menu mobile après sélection
+            closeMobileMenu();
         });
     });
+
+    // Menu mobile
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    const sidebar = document.getElementById('sidebar');
+    
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener('click', () => {
+            sidebar.classList.add('mobile-open');
+            mobileOverlay.classList.add('show');
+        });
+    }
+    
+    if (closeMenuBtn) {
+        closeMenuBtn.addEventListener('click', closeMobileMenu);
+    }
+    
+    if (mobileOverlay) {
+        mobileOverlay.addEventListener('click', closeMobileMenu);
+    }
 
     // Contrôles lecteur
     btnPlay.addEventListener('click', togglePlay);
@@ -236,6 +365,53 @@ function initEventListeners() {
     
     // Fin de lecture
     audioPlayer.addEventListener('ended', playNext);
+}
+
+function initFullscreenButton() {
+    const rootElement = document.documentElement;
+    const canEnterFullscreen = rootElement.requestFullscreen || rootElement.webkitRequestFullscreen;
+
+    if (!fullscreenBtn || !canEnterFullscreen) {
+        if (fullscreenBtn) fullscreenBtn.hidden = true;
+        return;
+    }
+
+    const getFullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+    const updateFullscreenButton = () => {
+        const isFullscreen = Boolean(getFullscreenElement());
+        const label = isFullscreen ? 'Quitter le plein écran' : 'Afficher en plein écran';
+        fullscreenBtn.textContent = isFullscreen ? '×' : '⛶';
+        fullscreenBtn.title = label;
+        fullscreenBtn.setAttribute('aria-label', label);
+        fullscreenBtn.setAttribute('aria-pressed', String(isFullscreen));
+    };
+
+    fullscreenBtn.addEventListener('click', async () => {
+        try {
+            if (getFullscreenElement()) {
+                const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+                await exitFullscreen.call(document);
+            } else {
+                await canEnterFullscreen.call(rootElement);
+            }
+        } catch (error) {
+            console.error('Impossible de basculer en plein écran:', error);
+            showNotification('Le plein écran n’est pas disponible.', 'error');
+        }
+    });
+
+    document.addEventListener('fullscreenchange', updateFullscreenButton);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+    updateFullscreenButton();
+}
+
+// Fonction pour fermer le menu mobile
+function closeMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    
+    if (sidebar) sidebar.classList.remove('mobile-open');
+    if (mobileOverlay) mobileOverlay.classList.remove('show');
 }
 
 // Chargement des vues
@@ -263,6 +439,9 @@ async function loadView(viewName) {
             break;
         case 'scan':
             await loadScan();
+            break;
+        case 'settings':
+            await loadSettings();
             break;
     }
 }
@@ -478,7 +657,7 @@ async function loadPlaylistDetail(playlistId) {
                          ondblclick="playTrackFromPlaylist(${playlistId}, ${i})"
                          oncontextmenu="showPlaylistTrackContextMenu(event, ${playlistId}, ${track.id}); return false;">
                         <div class="track-number">${i + 1}</div>
-                        <div class="track-title">${track.title}</div>
+                        <div class="track-title">${track.file_name || track.title}</div>
                         <div class="track-artist">${track.artist_name}</div>
                         <div class="track-album">${track.album_title}</div>
                         <div class="track-duration">${track.duration ? formatTime(track.duration) : '-'}</div>
@@ -524,6 +703,7 @@ async function playTrackFromPlaylist(playlistId, index) {
 // Menu contextuel pour piste dans une playlist
 function showPlaylistTrackContextMenu(event, playlistId, trackId) {
     event.preventDefault();
+    event.stopPropagation();
     
     // Supprimer un menu existant
     const existing = document.getElementById('contextMenu');
@@ -532,15 +712,20 @@ function showPlaylistTrackContextMenu(event, playlistId, trackId) {
     // Créer le menu contextuel
     const menu = document.createElement('div');
     menu.id = 'contextMenu';
+    
+    // S'assurer que le menu est visible dans la fenêtre
+    const x = Math.min(event.clientX, window.innerWidth - 220);
+    const y = Math.min(event.clientY, window.innerHeight - 150);
+    
     menu.style.cssText = `
         position: fixed;
-        top: ${event.clientY}px;
-        left: ${event.clientX}px;
+        top: ${y}px;
+        left: ${x}px;
         background: #282828;
         border: 1px solid #404040;
         border-radius: 4px;
         padding: 8px 0;
-        z-index: 10000;
+        z-index: 99999;
         min-width: 200px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     `;
@@ -579,11 +764,14 @@ function showPlaylistTrackContextMenu(event, playlistId, trackId) {
         }
     };
     setTimeout(() => document.addEventListener('click', closeMenu), 100);
+    
+    return false;
 }
 
 // Retirer une piste d'une playlist
 async function removeFromPlaylist(playlistId, trackId) {
-    if (!confirm('Retirer cette piste de la playlist ?')) return;
+    const confirmed = await showConfirm('Retirer cette piste de la playlist ?', false);
+    if (!confirmed) return;
     
     try {
         const response = await fetch(`${API_BASE}/playlists/${playlistId}/tracks/${trackId}`, {
@@ -591,13 +779,13 @@ async function removeFromPlaylist(playlistId, trackId) {
         });
         
         if (response.ok) {
-            showNotification('✅ Piste retirée');
+            showNotification('✅ Piste retirée', 'success');
             loadPlaylistDetail(playlistId); // Rafraîchir la vue
         } else {
-            alert('Erreur lors du retrait');
+            showNotification('❌ Erreur lors du retrait', 'error');
         }
     } catch (error) {
-        alert('Erreur: ' + error.message);
+        showNotification('❌ Erreur: ' + error.message, 'error');
     }
 }
 
@@ -611,7 +799,7 @@ async function loadQueue() {
                 ${state.queue.map((track, i) => `
                     <div class="track-item ${i === state.currentIndex ? 'playing' : ''}" data-queue-index="${i}">
                         <div class="track-number">${i + 1}</div>
-                        <div class="track-title">${track.title}</div>
+                        <div class="track-title">${track.file_name || track.title}</div>
                         <div class="track-artist">${track.artist_name || '-'}</div>
                         <div class="track-album">${track.album_title || '-'}</div>
                         <div class="track-duration">${track.duration ? formatTime(track.duration) : '-'}</div>
@@ -685,7 +873,11 @@ async function loadScan() {
                 ${status.scannedFiles > 0 ? `
                     <p style="color: #1db954;">✅ Dernier scan terminé avec succès : ${status.scannedFiles} fichiers traités</p>
                 ` : ''}
-                <button class="btn" onclick="startScan()">▶️ ${status.scannedFiles > 0 ? 'Relancer le scan' : 'Démarrer le scan'}</button>
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button class="btn" onclick="startScan()">▶️ ${status.scannedFiles > 0 ? 'Relancer le scan' : 'Démarrer le scan'}</button>
+                    <button class="btn" onclick="clearDatabase()" style="background: #d32f2f; color: #FFD700; font-weight: bold;">🗑️ Vider la base de données</button>
+                </div>
+                <p style="color: #888; font-size: 13px; margin-top: 8px;">⚠️ Vider la base supprimera toutes les pistes, artistes, albums et playlists</p>
             `}
         </div>
     `;
@@ -706,7 +898,7 @@ async function addScanPath() {
     const newPath = input.value.trim();
     
     if (!newPath) {
-        alert('Veuillez entrer un chemin');
+        showNotification('⚠️ Veuillez entrer un chemin', 'warning');
         return;
     }
     
@@ -722,17 +914,19 @@ async function addScanPath() {
         if (response.ok) {
             input.value = '';
             loadScan();
+            showNotification('✅ Chemin ajouté avec succès', 'success');
         } else {
-            alert(result.error || 'Erreur lors de l\'ajout du chemin');
+            showNotification('❌ ' + (result.error || 'Erreur lors de l\'ajout du chemin'), 'error');
         }
     } catch (error) {
-        alert('Erreur: ' + error.message);
+        showNotification('❌ Erreur: ' + error.message, 'error');
     }
 }
 
 // Supprimer un chemin de scan
 async function removeScanPath(path) {
-    if (!confirm(`Supprimer ce chemin ?\n${path}`)) {
+    const confirmed = await showConfirm(`Supprimer ce chemin ?\n${path}`, true);
+    if (!confirmed) {
         return;
     }
     
@@ -747,11 +941,12 @@ async function removeScanPath(path) {
         
         if (response.ok) {
             loadScan();
+            showNotification('✅ Chemin supprimé', 'success');
         } else {
-            alert(result.error || 'Erreur lors de la suppression du chemin');
+            showNotification('❌ ' + (result.error || 'Erreur lors de la suppression du chemin'), 'error');
         }
     } catch (error) {
-        alert('Erreur: ' + error.message);
+        showNotification('❌ Erreur: ' + error.message, 'error');
     }
 }
 
@@ -764,12 +959,62 @@ async function startScan() {
         if (response.ok) {
             console.log('✅ Scan démarré');
             loadScan();
+            showNotification('🔍 Scan démarré...', 'info');
         } else {
-            alert(result.error || 'Erreur lors du démarrage du scan');
+            showNotification('❌ ' + (result.error || 'Erreur lors du démarrage du scan'), 'error');
         }
     } catch (error) {
         console.error('Erreur scan:', error);
-        alert('Erreur lors du démarrage du scan');
+        showNotification('❌ Erreur lors du démarrage du scan', 'error');
+    }
+}
+
+// Vider complètement la base de données
+async function clearDatabase() {
+    const confirmation = await showConfirm(
+        'ATTENTION : Cette action va supprimer TOUTES les pistes, artistes, albums et playlists de la base de données.\n\nCette action est irréversible. Continuer ?',
+        true
+    );
+    
+    if (!confirmation) return;
+    
+    // Double confirmation
+    const doubleConfirm = await showConfirm(
+        'Êtes-vous vraiment sûr ? Toutes vos données musicales et playlists seront perdues !',
+        true
+    );
+    
+    if (!doubleConfirm) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/scan/clear`, { method: 'POST' });
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('✅ Base de données vidée avec succès', 'success');
+            console.log('🗑️ Base de données vidée');
+            
+            // Rafraîchir toutes les vues
+            loadScan();
+            
+            // Réinitialiser l'état de lecture
+            state.queue = [];
+            state.currentTrack = null;
+            state.currentIndex = -1;
+            state.isPlaying = false;
+            
+            // Mettre à jour le lecteur
+            audioPlayer.pause();
+            audioPlayer.src = '';
+            document.getElementById('playerTitle').textContent = 'Aucune piste';
+            document.getElementById('playerArtist').textContent = '-';
+            btnPlay.textContent = '▶';
+        } else {
+            showNotification('❌ ' + (result.error || 'Erreur lors du vidage de la base'), 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('❌ Erreur lors du vidage de la base de données', 'error');
     }
 }
 
@@ -856,11 +1101,13 @@ async function loadAlbumDetail(albumId) {
 function renderTrackItem(track, index) {
     const duration = track.duration ? formatTime(track.duration) : '-';
     const isCurrentTrack = state.currentTrack && state.currentTrack.id === track.id;
+    // Utiliser le nom du fichier si disponible, sinon le titre
+    const displayTitle = track.file_name || track.title;
     return `
         <div class="track-item ${isCurrentTrack ? 'track-playing' : ''}" data-track-id="${track.id}">
             <button class="track-edit-btn" title="Modifier le titre">✏️</button>
             <div class="track-number">${track.track_number || index + 1}</div>
-            <div class="track-title" data-editable="title">${track.title}</div>
+            <div class="track-title" data-editable="title">${displayTitle}</div>
             <div class="track-artist">${track.artist_name || '-'}</div>
             <div class="track-album">${track.album_title || '-'}</div>
             <div class="track-duration">${duration}</div>
@@ -972,34 +1219,48 @@ function attachTrackListeners() {
 }
 
 async function playTrack(trackId, addToQueue = true) {
-    const track = await fetch(`${API_BASE}/tracks/${trackId}`).then(r => r.json());
-    
-    if (addToQueue) {
-        // Ajouter à la queue si pas déjà dedans
-        const exists = state.queue.find(t => t.id == trackId);
-        if (!exists) {
-            state.queue.push(track);
+    try {
+        const track = await fetch(`${API_BASE}/tracks/${trackId}`).then(r => r.json());
+        
+        if (addToQueue) {
+            // Ajouter à la queue si pas déjà dedans
+            const exists = state.queue.find(t => t.id == trackId);
+            if (!exists) {
+                state.queue.push(track);
+            }
+            state.currentIndex = state.queue.findIndex(t => t.id == trackId);
         }
-        state.currentIndex = state.queue.findIndex(t => t.id == trackId);
+        
+        state.currentTrack = track;
+        audioPlayer.src = `/stream/${trackId}`;
+        
+        // Gérer les erreurs de chargement audio
+        audioPlayer.onerror = function() {
+            console.error('❌ Erreur chargement audio:', audioPlayer.error);
+            showNotification(`Erreur lecture: ${track.file_name || track.title}`, 'error');
+            playNext(); // Passer à la suivante
+        };
+        
+        await audioPlayer.play();
+        state.isPlaying = true;
+        btnPlay.textContent = '⏸';
+        
+        document.getElementById('playerTitle').textContent = track.file_name || track.title;
+        document.getElementById('playerArtist').textContent = track.artist_name || '-';
+        document.getElementById('playerCover').textContent = '🎵';
+    
+        // Highlight dans la queue
+        updateQueueHighlight();
+        
+        // Mettre à jour le surlignage dans la liste des pistes
+        updateTrackListHighlight();
+        
+        // Sauvegarder l'état
+        savePlayerState();
+    } catch (error) {
+        console.error('❌ Erreur lecture piste:', error);
+        showNotification('Erreur lors de la lecture', 'error');
     }
-    
-    state.currentTrack = track;
-    audioPlayer.src = `/stream/${trackId}`;
-    audioPlayer.play();
-    state.isPlaying = true;
-    btnPlay.textContent = '⏸';
-    
-    document.getElementById('playerTitle').textContent = track.title;
-    document.getElementById('playerArtist').textContent = track.artist_name || '-';
-    
-    // Highlight dans la queue
-    updateQueueHighlight();
-    
-    // Mettre à jour le surlignage dans la liste des pistes
-    updateTrackListHighlight();
-    
-    // Sauvegarder l'état
-    savePlayerState();
 }
 
 function updateTrackListHighlight() {
@@ -1030,7 +1291,7 @@ function addToQueue(trackId) {
         .then(r => r.json())
         .then(track => {
             state.queue.push(track);
-            console.log('✅ Ajouté à la file:', track.title);
+            console.log('✅ Ajouté à la file:', track.file_name || track.title);
             if (state.currentView === 'queue') {
                 loadQueue();
             }
@@ -1160,13 +1421,15 @@ function removeFromQueue(index) {
     loadQueue();
 }
 
-function clearQueue() {
-    if (confirm('Vider la file d\'attente ?')) {
+async function clearQueue() {
+    const confirmed = await showConfirm('Vider la file d\'attente ?', false);
+    if (confirmed) {
         state.queue = [];
         state.currentIndex = -1;
         audioPlayer.pause();
         state.isPlaying = false;
         loadQueue();
+        showNotification('✅ File d\'attente vidée', 'success');
     }
 }
 
@@ -1362,7 +1625,7 @@ async function showPlaylistSelector(trackId) {
     const playlists = await fetch(`${API_BASE}/playlists`).then(r => r.json());
     
     if (playlists.length === 0) {
-        alert('Aucune playlist disponible. Créez-en une d\'abord !');
+        showNotification('⚠️ Aucune playlist disponible. Créez-en une d\'abord !', 'warning');
         return;
     }
     
@@ -1445,13 +1708,13 @@ async function addTrackToPlaylist(playlistId, trackId) {
         if (response.ok) {
             console.log('✅ Piste ajoutée à la playlist');
             // Afficher une notification temporaire
-            showNotification('✅ Ajouté à la playlist');
+            showNotification('✅ Ajouté à la playlist', 'success');
         } else {
             const error = await response.json();
-            alert('Erreur: ' + (error.error || 'Impossible d\'ajouter la piste'));
+            showNotification('❌ ' + (error.error || 'Impossible d\'ajouter la piste'), 'error');
         }
     } catch (error) {
-        alert('Erreur: ' + error.message);
+        showNotification('❌ Erreur: ' + error.message, 'error');
     }
 }
 
@@ -1480,14 +1743,26 @@ function showNotification(message) {
     }, 2000);
 }
 
-function createPlaylist() {
-    const name = prompt('Nom de la playlist:');
+async function createPlaylist() {
+    const name = await showPrompt('Nom de la playlist:');
     if (name) {
-        fetch(`${API_BASE}/playlists`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        }).then(() => loadPlaylists());
+        try {
+            const response = await fetch(`${API_BASE}/playlists`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            
+            if (response.ok) {
+                showNotification('✅ Playlist créée', 'success');
+                loadPlaylists();
+            } else {
+                const error = await response.json();
+                showNotification('❌ ' + (error.error || 'Erreur lors de la création'), 'error');
+            }
+        } catch (error) {
+            showNotification('❌ Erreur: ' + error.message, 'error');
+        }
     }
 }
 
@@ -1530,8 +1805,8 @@ async function openFolderBrowser() {
         </div>
         <div id="browserContent" style="flex: 1; overflow-y: auto; padding: 16px;"></div>
         <div style="padding: 16px; border-top: 1px solid #404040; display: flex; gap: 12px; justify-content: flex-end;">
-            <button class="btn" onclick="closeFolderBrowser()" style="background: #404040;">Annuler</button>
-            <button class="btn" onclick="selectCurrentFolder()" style="background: #1db954;">✓ Sélectionner ce dossier</button>
+            <button class="btn" onclick="closeFolderBrowser()" style="background: #404040; color: white;">Annuler</button>
+            <button class="btn" onclick="selectCurrentFolder()" style="background: #1db954; color: white !important; border-color: #1db954;">✓ Sélectionner ce dossier</button>
         </div>
     `;
     
@@ -1561,7 +1836,7 @@ async function browseTo(path) {
         // Bouton parent si disponible
         if (data.parentPath) {
             html += `
-                <div class="folder-item" onclick="browseTo('${data.parentPath.replace(/'/g, "\\'")}')">
+                <div class="folder-item" data-path="${data.parentPath.replace(/"/g, '&quot;')}">
                     <span style="font-size: 20px;">⬆️</span>
                     <span style="flex: 1; font-weight: bold;">..</span>
                 </div>
@@ -1574,7 +1849,7 @@ async function browseTo(path) {
         } else {
             data.directories.forEach(dir => {
                 html += `
-                    <div class="folder-item" onclick="browseTo('${dir.path.replace(/'/g, "\\'")}')">
+                    <div class="folder-item" data-path="${dir.path.replace(/"/g, '&quot;')}">
                         <span style="font-size: 20px;">📁</span>
                         <span style="flex: 1;">${dir.name}</span>
                         <span style="color: #888;">›</span>
@@ -1583,7 +1858,15 @@ async function browseTo(path) {
             });
         }
         
-        document.getElementById('browserContent').innerHTML = html;
+        const browserContent = document.getElementById('browserContent');
+        browserContent.innerHTML = html;
+        
+        // Ajouter les événements click
+        browserContent.querySelectorAll('.folder-item[data-path]').forEach(item => {
+            item.addEventListener('click', () => {
+                browseTo(item.getAttribute('data-path'));
+            });
+        });
     } catch (error) {
         document.getElementById('browserContent').innerHTML = `
             <p style="color: #c41e3a; text-align: center; padding: 40px;">
@@ -1593,10 +1876,29 @@ async function browseTo(path) {
     }
 }
 
-function selectCurrentFolder() {
-    if (currentBrowsePath) {
-        document.getElementById('newPathInput').value = currentBrowsePath;
-        closeFolderBrowser();
+async function selectCurrentFolder() {
+    if (!currentBrowsePath) return;
+    
+    closeFolderBrowser();
+    
+    // Ajouter automatiquement le chemin sélectionné
+    try {
+        const response = await fetch(`${API_BASE}/scan/paths/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: currentBrowsePath })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('✅ Chemin ajouté : ' + currentBrowsePath, 'success', 3000);
+            loadScan();
+        } else {
+            showNotification('❌ ' + (result.error || 'Erreur lors de l\'ajout du chemin'), 'error');
+        }
+    } catch (error) {
+        showNotification('❌ Erreur: ' + error.message, 'error');
     }
 }
 
@@ -1606,4 +1908,199 @@ function closeFolderBrowser() {
         modal.remove();
     }
     currentBrowsePath = null;
+}
+
+/* ===========================
+   VUE PARAMÈTRES
+   =========================== */
+async function loadSettings() {
+    try {
+        const response = await fetch(`${API_BASE}/settings/music-paths`);
+        const data = await response.json();
+        
+        contentView.innerHTML = `
+            <h2 class="section-title">⚙️ Paramètres</h2>
+            
+            <div class="section">
+                <h3>Chemins de musique</h3>
+                <p style="color: #888; font-size: 14px; margin-bottom: 16px;">
+                    Configurez les dossiers à inclure dans votre bibliothèque musicale.<br>
+                    Ajoutez des sous-répertoires spécifiques pour un meilleur contrôle.
+                </p>
+                
+                <div id="musicPathsList" style="margin-bottom: 16px;">
+                    ${data.musicPaths.length === 0 ? 
+                        '<p style="color: #888;">Aucun chemin configuré</p>' : 
+                        data.musicPaths.map(p => `
+                            <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px;">
+                                <span style="flex: 1; font-family: monospace;">📁 ${p}</span>
+                                <button class="btn-icon" onclick="removeSettingPath('${p.replace(/'/g, "\\'")}')">❌</button>
+                            </div>
+                        `).join('')
+                    }
+                </div>
+                
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                    <input type="text" id="newSettingPathInput" placeholder="/mnt/seagate/Music JPVW/Jazz" 
+                           style="flex: 1; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid #404040; border-radius: 4px; color: #fff; font-family: monospace;">
+                    <button class="btn" onclick="openSettingsFolderBrowser()">📁 Parcourir</button>
+                    <button class="btn" onclick="addSettingPath()">➕ Ajouter</button>
+                </div>
+                
+                <div style="background: rgba(255, 193, 7, 0.1); border-left: 3px solid #ffc107; padding: 12px; border-radius: 4px; margin-top: 16px;">
+                    <p style="color: #ffc107; font-size: 13px; margin: 0;">
+                        ⚠️ <strong>Important :</strong> Après avoir modifié les chemins, n'oubliez pas de relancer le scan 
+                        depuis la section <button class="btn" onclick="loadView('scan')" style="display: inline; padding: 4px 8px; font-size: 12px;">🔍 Scanner</button>
+                    </p>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        showNotification('❌ Erreur lors du chargement des paramètres', 'error');
+        console.error('Erreur loadSettings:', error);
+    }
+}
+
+// Ajouter un chemin de musique
+async function addSettingPath() {
+    const input = document.getElementById('newSettingPathInput');
+    const newPath = input.value.trim();
+    
+    if (!newPath) {
+        showNotification('⚠️ Veuillez entrer un chemin', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/settings/music-paths`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: newPath })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('✅ Chemin ajouté avec succès', 'success');
+            input.value = '';
+            loadSettings();
+        } else {
+            showNotification('❌ ' + (result.error || 'Erreur lors de l\'ajout'), 'error');
+        }
+    } catch (error) {
+        showNotification('❌ Erreur: ' + error.message, 'error');
+    }
+}
+
+// Supprimer un chemin de musique
+async function removeSettingPath(pathToRemove) {
+    const confirmed = await confirm(`Supprimer ce chemin ?\n\n${pathToRemove}`);
+    if (!confirmed) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/settings/music-paths`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: pathToRemove })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showNotification('✅ Chemin supprimé', 'success');
+            loadSettings();
+        } else {
+            showNotification('❌ ' + (result.error || 'Erreur lors de la suppression'), 'error');
+        }
+    } catch (error) {
+        showNotification('❌ Erreur: ' + error.message, 'error');
+    }
+}
+
+// Navigateur de dossiers pour les paramètres
+let currentSettingsBrowsePath = '/seagate/Music JPVW';
+
+async function openSettingsFolderBrowser() {
+    await loadSettingsFolderBrowser(currentSettingsBrowsePath);
+}
+
+async function loadSettingsFolderBrowser(dirPath) {
+    try {
+        const response = await fetch(`${API_BASE}/settings/directories?path=${encodeURIComponent(dirPath)}`);
+        const data = await response.json();
+        
+        if (!response.ok) {
+            showNotification('❌ ' + (data.error || 'Impossible d\'accéder au répertoire'), 'error');
+            return;
+        }
+        
+        currentSettingsBrowsePath = dirPath;
+        
+        // Créer ou mettre à jour la modale
+        let modal = document.getElementById('settingsFolderBrowserModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'settingsFolderBrowserModal';
+            modal.className = 'modal';
+            modal.style.display = 'flex';
+            document.body.appendChild(modal);
+        }
+        
+        const parentPath = dirPath.split('/').slice(0, -1).join('/') || '/';
+        
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 700px; max-height: 80vh;">
+                <div class="modal-header">
+                    <span class="modal-icon">📁</span>
+                    <h2 class="modal-title">Parcourir les dossiers</h2>
+                </div>
+                <div class="modal-body" style="overflow-y: auto;">
+                    <div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; font-family: monospace; font-size: 13px;">
+                        ${dirPath}
+                    </div>
+                    
+                    ${dirPath !== '/' ? `
+                        <div onclick="loadSettingsFolderBrowser('${parentPath.replace(/'/g, "\\'")}')" 
+                             style="cursor: pointer; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 4px; margin-bottom: 4px; transition: background 0.2s;"
+                             onmouseover="this.style.background='rgba(255,255,255,0.08)'"
+                             onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+                            📂 ..
+                        </div>
+                    ` : ''}
+                    
+                    ${data.directories.length === 0 ? 
+                        '<p style="color: #888; text-align: center; padding: 20px;">Aucun sous-répertoire</p>' :
+                        data.directories.map(dir => `
+                            <div onclick="loadSettingsFolderBrowser('${dir.replace(/'/g, "\\'")}')"
+                                 style="cursor: pointer; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 4px; margin-bottom: 4px; transition: background 0.2s;"
+                                 onmouseover="this.style.background='rgba(255,255,255,0.08)'"
+                                 onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+                                📁 ${dir.split('/').pop()}
+                            </div>
+                        `).join('')
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button onclick="closeSettingsFolderBrowser()" class="modal-btn modal-btn-cancel">Annuler</button>
+                    <button onclick="selectSettingsFolder()" class="modal-btn modal-btn-confirm">Sélectionner ce dossier</button>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        showNotification('❌ Erreur: ' + error.message, 'error');
+    }
+}
+
+async function selectSettingsFolder() {
+    document.getElementById('newSettingPathInput').value = currentSettingsBrowsePath;
+    closeSettingsFolderBrowser();
+    showNotification('📁 Dossier sélectionné : ' + currentSettingsBrowsePath, 'info', 2000);
+}
+
+function closeSettingsFolderBrowser() {
+    const modal = document.getElementById('settingsFolderBrowserModal');
+    if (modal) {
+        modal.remove();
+    }
+    currentSettingsBrowsePath = '/seagate/Music JPVW';
 }

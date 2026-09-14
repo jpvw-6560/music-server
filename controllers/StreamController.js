@@ -3,8 +3,26 @@
 
 const Track = require('../models/Track');
 const fs = require('fs');
+const path = require('path');
 
 class StreamController {
+  /**
+   * Déterminer le type MIME selon l'extension du fichier
+   */
+  static getContentType(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = {
+      '.mp3': 'audio/mpeg',
+      '.flac': 'audio/flac',
+      '.m4a': 'audio/mp4',
+      '.ogg': 'audio/ogg',
+      '.wav': 'audio/wav',
+      '.wma': 'audio/x-ms-wma',
+      '.aac': 'audio/aac'
+    };
+    return mimeTypes[ext] || 'audio/mpeg';
+  }
+
   /**
    * GET /stream/:trackId
    * Streaming audio avec support range
@@ -24,6 +42,7 @@ class StreamController {
       }
       
       const stat = fs.statSync(filePath);
+      const contentType = StreamController.getContentType(filePath);
       const range = req.headers.range;
       
       if (range) {
@@ -37,14 +56,14 @@ class StreamController {
           'Content-Range': `bytes ${start}-${end}/${stat.size}`,
           'Accept-Ranges': 'bytes',
           'Content-Length': chunksize,
-          'Content-Type': 'audio/mpeg'
+          'Content-Type': contentType
         });
         
         file.pipe(res);
       } else {
         res.writeHead(200, {
           'Content-Length': stat.size,
-          'Content-Type': 'audio/mpeg'
+          'Content-Type': contentType
         });
         
         fs.createReadStream(filePath).pipe(res);
