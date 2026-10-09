@@ -96,19 +96,38 @@ class Playlist {
    * @returns {Promise<number>} Position de la piste
    */
   static async addTrack(playlistId, trackId) {
-    const [maxPos] = await db.pool.query(
-      'SELECT COALESCE(MAX(position), 0) as max_pos FROM playlist_tracks WHERE playlist_id = ?',
-      [playlistId]
-    );
-    
-    const position = maxPos[0].max_pos + 1;
-    
-    await db.pool.query(
-      'INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)',
-      [playlistId, trackId, position]
-    );
-    
-    return position;
+    const connection = await db.pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const [existing] = await connection.query(
+        'SELECT id FROM playlist_tracks WHERE playlist_id = ? AND track_id = ? LIMIT 1 FOR UPDATE',
+        [playlistId, trackId]
+      );
+      if (existing.length > 0) {
+        await connection.rollback();
+        return null;
+      }
+
+      const [maxPos] = await connection.query(
+        'SELECT COALESCE(MAX(position), 0) as max_pos FROM playlist_tracks WHERE playlist_id = ? FOR UPDATE',
+        [playlistId]
+      );
+      const position = maxPos[0].max_pos + 1;
+
+      await connection.query(
+        'INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)',
+        [playlistId, trackId, position]
+      );
+      await connection.commit();
+      return position;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   /**

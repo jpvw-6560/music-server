@@ -111,6 +111,10 @@ class PlaylistController {
       }
       
       const position = await Playlist.addTrack(req.params.id, track_id);
+
+      if (position === null) {
+        return res.status(409).json({ error: 'Cette piste est déjà dans la playlist' });
+      }
       
       res.json({ success: true, position });
     } catch (err) {

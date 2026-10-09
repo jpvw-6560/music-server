@@ -111,6 +111,7 @@ async function initDatabase() {
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
                 FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE,
+                UNIQUE KEY unique_playlist_track (playlist_id, track_id),
                 KEY idx_playlist (playlist_id),
                 KEY idx_track (track_id)
             )

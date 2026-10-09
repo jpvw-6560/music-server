@@ -6,6 +6,21 @@ const fs = require('fs');
 const path = require('path');
 
 class StreamController {
+  static resolveFilePath(filePath) {
+    if (fs.existsSync(filePath)) {
+      return filePath;
+    }
+
+    if (filePath.startsWith('/seagate/')) {
+      const localPath = path.join('/mnt/seagate', filePath.slice('/seagate/'.length));
+      if (fs.existsSync(localPath)) {
+        return localPath;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Déterminer le type MIME selon l'extension du fichier
    */
@@ -35,9 +50,9 @@ class StreamController {
         return res.status(404).json({ error: 'Track not found' });
       }
       
-      const filePath = track.file_path;
+      const filePath = StreamController.resolveFilePath(track.file_path);
       
-      if (!fs.existsSync(filePath)) {
+      if (!filePath) {
         return res.status(404).json({ error: 'File not found' });
       }
       

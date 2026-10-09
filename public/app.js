@@ -173,6 +173,7 @@ const state = {
     shuffle: false, // Mode aléatoire
     continuous: false // Lecture continue (passer automatiquement à la suivante)
 };
+let playbackRequestId = 0;
 
 // Sauvegarder l'état dans localStorage
 function savePlayerState() {
@@ -518,6 +519,7 @@ async function loadAlbums() {
 // Vue pistes (avec pagination)
 let currentTracksPage = 1;
 const tracksPerPage = 100;
+let allLibraryTracks = [];
 
 async function loadTracks(page = 1, searchQuery = '') {
     currentTracksPage = page;
@@ -608,26 +610,182 @@ async function loadTracks(page = 1, searchQuery = '') {
 }
 
 // Vue playlists
-async function loadPlaylists() {
-    const playlists = await fetch(`${API_BASE}/playlists`).then(r => r.json());
-    
+let selectedPlaylistId = null;
+let playlistLibraryTracks = [];
+let playlistTrackSelection = new Set();
+
+async function loadPlaylists(playlistId = selectedPlaylistId, searchQuery = '', resetSelection = false) {
+    const [playlists, tracksData] = await Promise.all([
+        fetch(`${API_BASE}/playlists`).then(r => r.json()),
+        playlistLibraryTracks.length > 0
+            ? Promise.resolve(playlistLibraryTracks)
+            : fetch(`${API_BASE}/tracks?page=1&limit=10000`).then(r => r.json())
+    ]);
+
+    playlistLibraryTracks = Array.isArray(tracksData) ? tracksData : (tracksData.tracks || []);
+    if (!playlistId && playlists.length > 0) playlistId = playlists[0].id;
+    selectedPlaylistId = playlistId ? String(playlistId) : null;
+    if (resetSelection) playlistTrackSelection.clear();
+
+    const selectedPlaylistData = selectedPlaylistId
+        ? await fetch(`${API_BASE}/playlists/${selectedPlaylistId}`).then(r => r.json())
+        : { tracks: [] };
+    const existingTrackIds = new Set((selectedPlaylistData.tracks || []).map(track => String(track.id)));
+    existingTrackIds.forEach(trackId => playlistTrackSelection.delete(trackId));
+
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase('fr');
+    const filteredTracks = playlistLibraryTracks.filter(track => {
+        if (!normalizedQuery) return true;
+        return [track.file_name, track.title, track.artist_name, track.album_title]
+            .some(value => String(value || '').toLocaleLowerCase('fr').includes(normalizedQuery));
+    });
+    const selectedPlaylist = playlists.find(playlist => String(playlist.id) === selectedPlaylistId);
+    const selectableTrackIds = filteredTracks
+        .map(track => String(track.id))
+        .filter(trackId => !existingTrackIds.has(trackId));
+
     contentView.innerHTML = `
-        <h2 class="section-title">📋 Playlists</h2>
-        <button class="btn" onclick="createPlaylist()">➕ Créer playlist</button>
-        <div class="grid">
-            ${playlists.map(playlist => `
-                <div class="card" data-playlist-id="${playlist.id}">
-                    <div class="card-cover">📋</div>
-                    <div class="card-title">${playlist.name}</div>
-                    <div class="card-subtitle">${playlist.track_count} titres</div>
+        <div class="playlist-page-header">
+            <div>
+                <h2 class="section-title">📋 Playlists</h2>
+                <p>Sélectionnez une playlist, puis ajoutez-y des pistes depuis la bibliothèque.</p>
+            </div>
+        </div>
+        <div class="playlist-workspace">
+            <aside class="playlist-panel">
+                <div class="playlist-panel-header">
+                    <h3>Mes playlists</h3>
+                    <button class="btn playlist-header-btn" onclick="createPlaylist()">＋ Créer</button>
                 </div>
-            `).join('')}
+                <div class="playlist-selector-list">
+                    ${playlists.length === 0 ? '<p class="playlist-empty">Aucune playlist</p>' : playlists.map(playlist => `
+                        <button class="playlist-selector ${String(playlist.id) === selectedPlaylistId ? 'active' : ''}"
+                                data-select-playlist="${playlist.id}">
+                            <span>${playlist.name}</span>
+                            <small>${playlist.track_count} titre${Number(playlist.track_count) !== 1 ? 's' : ''}</small>
+                        </button>
+                    `).join('')}
+                </div>
+                ${selectedPlaylist ? `
+                    <button class="btn playlist-open-btn" onclick="loadPlaylistDetail(${selectedPlaylist.id})">Voir le contenu</button>
+                ` : ''}
+            </aside>
+            <section class="playlist-library">
+                <div class="playlist-library-header">
+                    <div>
+                        <h3>Toutes les pistes</h3>
+                        <p>${selectedPlaylist ? `Ajout dans « ${selectedPlaylist.name} »` : 'Créez une playlist pour ajouter des pistes'}</p>
+                    </div>
+                    <div class="playlist-selection-actions">
+                        <span>${filteredTracks.length} piste${filteredTracks.length !== 1 ? 's' : ''}</span>
+                        <button id="playlistSelectAll" class="btn playlist-header-btn" ${selectedPlaylist ? '' : 'disabled'}>Tous</button>
+                        <button id="playlistSelectNone" class="btn playlist-header-btn" ${selectedPlaylist ? '' : 'disabled'}>Aucun</button>
+                        <button id="playlistAddSelected" class="btn playlist-header-btn playlist-add-selected" disabled>Ajouter</button>
+                    </div>
+                </div>
+                <input id="playlistTrackSearch" class="playlist-search" type="search"
+                       placeholder="Rechercher un titre, un artiste ou un album..." value="${searchQuery}">
+                <div class="playlist-track-list">
+                    ${filteredTracks.map(track => {
+                        const trackId = String(track.id);
+                        const isExisting = existingTrackIds.has(trackId);
+                        const isSelected = playlistTrackSelection.has(trackId);
+                        return `
+                        <div class="playlist-track-row ${isExisting ? 'already-added' : ''}" data-playlist-track-row="${track.id}">
+                            <div class="playlist-track-main">
+                                <strong>${track.file_name || track.title}</strong>
+                                <span>${track.artist_name || '-'} · ${track.album_title || '-'}${isExisting ? ' · Déjà dans la playlist' : ''}</span>
+                            </div>
+                            <button class="playlist-add-track ${isExisting || isSelected ? 'added' : ''}" data-select-track="${track.id}"
+                                    title="${isExisting ? 'Déjà dans la playlist' : 'Sélectionner cette piste'}"
+                                    aria-label="Sélectionner ${track.file_name || track.title}"
+                                    ${selectedPlaylist && !isExisting ? '' : 'disabled'}>${isExisting || isSelected ? '✓' : '＋'}</button>
+                        </div>
+                    `}).join('')}
+                </div>
+            </section>
         </div>
     `;
-    
-    document.querySelectorAll('[data-playlist-id]').forEach(card => {
-        card.addEventListener('click', () => loadPlaylistDetail(card.dataset.playlistId));
+
+    document.querySelectorAll('[data-select-playlist]').forEach(button => {
+        button.addEventListener('click', () => loadPlaylists(button.dataset.selectPlaylist, searchQuery, true));
     });
+
+    document.querySelectorAll('[data-select-track]').forEach(button => {
+        button.addEventListener('click', () => togglePlaylistTrackSelection(button.dataset.selectTrack));
+    });
+
+    document.getElementById('playlistSelectAll').addEventListener('click', () => {
+        selectableTrackIds.forEach(trackId => playlistTrackSelection.add(trackId));
+        updatePlaylistSelectionControls();
+    });
+    document.getElementById('playlistSelectNone').addEventListener('click', () => {
+        selectableTrackIds.forEach(trackId => playlistTrackSelection.delete(trackId));
+        updatePlaylistSelectionControls();
+    });
+    document.getElementById('playlistAddSelected').addEventListener('click', addSelectedTracksToPlaylist);
+    updatePlaylistSelectionControls();
+
+    const playlistSearch = document.getElementById('playlistTrackSearch');
+    let searchTimeout;
+    playlistSearch.addEventListener('input', event => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => loadPlaylists(selectedPlaylistId, event.target.value), 250);
+    });
+    playlistSearch.focus();
+    playlistSearch.setSelectionRange(searchQuery.length, searchQuery.length);
+}
+
+function togglePlaylistTrackSelection(trackId) {
+    if (playlistTrackSelection.has(trackId)) {
+        playlistTrackSelection.delete(trackId);
+    } else {
+        playlistTrackSelection.add(trackId);
+    }
+    updatePlaylistSelectionControls();
+}
+
+function updatePlaylistSelectionControls() {
+    document.querySelectorAll('[data-select-track]:not(:disabled)').forEach(button => {
+        const isSelected = playlistTrackSelection.has(button.dataset.selectTrack);
+        button.classList.toggle('added', isSelected);
+        button.textContent = isSelected ? '✓' : '＋';
+        button.closest('.playlist-track-row')?.classList.toggle('selected', isSelected);
+    });
+
+    const addButton = document.getElementById('playlistAddSelected');
+    if (addButton) {
+        const count = playlistTrackSelection.size;
+        addButton.disabled = count === 0;
+        addButton.textContent = count > 0 ? `Ajouter (${count})` : 'Ajouter';
+    }
+}
+
+async function addSelectedTracksToPlaylist() {
+    if (!selectedPlaylistId || playlistTrackSelection.size === 0) return;
+
+    const addButton = document.getElementById('playlistAddSelected');
+    const trackIds = [...playlistTrackSelection];
+    addButton.disabled = true;
+    try {
+        let addedCount = 0;
+        for (const trackId of trackIds) {
+            const response = await fetch(`${API_BASE}/playlists/${selectedPlaylistId}/tracks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ track_id: trackId })
+            });
+            if (response.ok) addedCount++;
+        }
+
+        playlistTrackSelection.clear();
+        showNotification(`${addedCount} piste${addedCount !== 1 ? 's' : ''} ajoutée${addedCount !== 1 ? 's' : ''}`, 'success');
+        const searchQuery = document.getElementById('playlistTrackSearch')?.value || '';
+        await loadPlaylists(selectedPlaylistId, searchQuery);
+    } catch (error) {
+        showNotification(error.message, 'error');
+        updatePlaylistSelectionControls();
+    }
 }
 
 // Vue détail d'une playlist
@@ -637,22 +795,25 @@ async function loadPlaylistDetail(playlistId) {
     const tracks = data.tracks || [];
     
     contentView.innerHTML = `
-        <div style="margin-bottom: 20px;">
+        <div class="playlist-detail-header">
             <button class="btn" onclick="loadPlaylists()" style="background: #404040;">← Retour</button>
+            <div class="playlist-detail-actions">
+                <span>${tracks.length} titre${tracks.length !== 1 ? 's' : ''}</span>
+                ${tracks.length > 0 ? `
+                    <button class="btn" onclick="playPlaylist(${playlistId})">▶️ Tout jouer</button>
+                    <button class="btn" onclick="addPlaylistToQueue(${playlistId})" style="background: #404040;">➕ Ajouter à la file</button>
+                ` : ''}
+            </div>
         </div>
         <h2 class="section-title">📋 ${playlist.name}</h2>
         ${playlist.description ? `<p style="color: #888; margin: -10px 0 20px 0;">${playlist.description}</p>` : ''}
-        <div style="margin-bottom: 20px;">
-            <span style="color: #888;">${tracks.length} titres</span>
-            ${tracks.length > 0 ? `
-                <button class="btn" onclick="playPlaylist(${playlistId})" style="margin-left: 10px;">▶️ Tout jouer</button>
-                <button class="btn" onclick="addPlaylistToQueue(${playlistId})" style="margin-left: 10px; background: #404040;">➕ Ajouter à la file</button>
-            ` : ''}
-        </div>
         ${tracks.length === 0 ? '<p>Cette playlist est vide. Faites un clic droit sur une piste pour l\'ajouter.</p>' : `
-            <div class="track-list">
+            <div class="track-list playlist-detail-list">
+                <div class="playlist-detail-columns" aria-hidden="true">
+                    <span>#</span><span>Titre</span><span>Artiste</span><span>Album</span><span>Durée</span>
+                </div>
                 ${tracks.map((track, i) => `
-                    <div class="track-item" 
+                    <div class="track-item playlist-detail-track"
                          data-track-id="${track.id}"
                          ondblclick="playTrackFromPlaylist(${playlistId}, ${i})"
                          oncontextmenu="showPlaylistTrackContextMenu(event, ${playlistId}, ${track.id}); return false;">
@@ -1219,8 +1380,11 @@ function attachTrackListeners() {
 }
 
 async function playTrack(trackId, addToQueue = true) {
+    const requestId = ++playbackRequestId;
+
     try {
         const track = await fetch(`${API_BASE}/tracks/${trackId}`).then(r => r.json());
+        if (requestId !== playbackRequestId) return;
         
         if (addToQueue) {
             // Ajouter à la queue si pas déjà dedans
@@ -1236,12 +1400,17 @@ async function playTrack(trackId, addToQueue = true) {
         
         // Gérer les erreurs de chargement audio
         audioPlayer.onerror = function() {
+            if (requestId !== playbackRequestId || state.currentTrack?.id != track.id) return;
+
             console.error('❌ Erreur chargement audio:', audioPlayer.error);
             showNotification(`Erreur lecture: ${track.file_name || track.title}`, 'error');
-            playNext(); // Passer à la suivante
+            state.isPlaying = false;
+            btnPlay.textContent = '▶';
         };
         
         await audioPlayer.play();
+        if (requestId !== playbackRequestId) return;
+
         state.isPlaying = true;
         btnPlay.textContent = '⏸';
         
@@ -1258,12 +1427,14 @@ async function playTrack(trackId, addToQueue = true) {
         // Sauvegarder l'état
         savePlayerState();
     } catch (error) {
+        if (requestId !== playbackRequestId || error.name === 'AbortError') return;
+
         console.error('❌ Erreur lecture piste:', error);
         showNotification('Erreur lors de la lecture', 'error');
     }
 }
 
-function updateTrackListHighlight() {
+async function updateTrackListHighlight() {
     // Retirer la classe active de toutes les pistes
     document.querySelectorAll('.track-item').forEach(item => {
         item.classList.remove('track-playing');
@@ -1274,8 +1445,32 @@ function updateTrackListHighlight() {
         const currentItem = document.querySelector(`.track-item[data-track-id="${state.currentTrack.id}"]`);
         if (currentItem) {
             currentItem.classList.add('track-playing');
+            currentItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (state.currentView === 'tracks') {
+            await revealCurrentTrackPage();
         }
     }
+}
+
+async function revealCurrentTrackPage() {
+    if (allLibraryTracks.length === 0) {
+        const data = await fetch(`${API_BASE}/tracks?page=1&limit=10000`).then(r => r.json());
+        allLibraryTracks = Array.isArray(data) ? data : (data.tracks || []);
+    }
+
+    const trackIndex = allLibraryTracks.findIndex(track => track.id == state.currentTrack.id);
+    if (trackIndex < 0) return;
+
+    const targetPage = Math.floor(trackIndex / tracksPerPage) + 1;
+    if (targetPage !== currentTracksPage) await loadTracks(targetPage);
+
+    requestAnimationFrame(() => {
+        const currentItem = document.querySelector(`.track-item[data-track-id="${state.currentTrack.id}"]`);
+        if (currentItem) {
+            currentItem.classList.add('track-playing');
+            currentItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
 }
 
 function playFromQueue(index) {
@@ -1366,6 +1561,7 @@ async function loadAllTracksToQueue() {
     }
     
     state.queue = [...tracks];
+    allLibraryTracks = [...tracks];
     
     if (state.shuffle) {
         // Mélanger la queue
