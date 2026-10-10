@@ -203,6 +203,7 @@ async function restorePlayerState() {
             state.repeat = playerState.repeat || false;
             state.shuffle = playerState.shuffle || false;
             state.continuous = playerState.continuous || false;
+            if (!state.continuous) state.shuffle = false;
             
             // Restaurer le volume
             if (playerState.volume !== undefined) {
@@ -556,7 +557,7 @@ async function loadTracks(page = 1, searchQuery = '') {
         <div class="view-sticky-controls">
             <div class="play-mode-controls">
                 <button id="btnContinuous" class="btn ${state.continuous ? 'btn-active' : ''}" onclick="toggleContinuous()">🔁 Lecture continue</button>
-                <button id="btnShuffle" class="btn ${state.shuffle ? 'btn-active' : ''}" onclick="toggleShuffle()">🎲 Aléatoire</button>
+                <button id="btnShuffle" class="btn ${state.shuffle && state.continuous ? 'btn-active' : ''}" onclick="toggleShuffle()" ${state.continuous ? '' : 'disabled'}>🎲 Aléatoire</button>
                 ${state.queue.length > 0 ? `<span class="queue-count">📋 ${state.queue.length} pistes en file</span>` : ''}
             </div>
             <input type="text" id="trackSearch" class="track-search"
@@ -813,7 +814,7 @@ async function loadPlaylistDetail(playlistId) {
             <button class="btn" onclick="closePlaylistDetail()" style="background: #404040;">← Retour</button>
             <div class="playlist-detail-actions">
                 <button id="btnContinuous" class="btn ${state.continuous ? 'btn-active' : ''}" onclick="toggleContinuous()">🔁 Continue</button>
-                <button id="btnShuffle" class="btn ${state.shuffle ? 'btn-active' : ''}" onclick="toggleShuffle()">🎲 Aléatoire</button>
+                <button id="btnShuffle" class="btn ${state.shuffle && state.continuous ? 'btn-active' : ''}" onclick="toggleShuffle()" ${state.continuous ? '' : 'disabled'}>🎲 Aléatoire</button>
                 ${tracks.length > 0 ? `
                     <button class="btn" onclick="playPlaylist(${playlistId})">▶️ Tout jouer</button>
                     <button class="btn" onclick="addPlaylistToQueue(${playlistId})" style="background: #404040;">➕ Ajouter à la file</button>
@@ -1633,12 +1634,16 @@ async function playAllArtist(artistId) {
 // Basculer le mode lecture continue
 function toggleContinuous() {
     state.continuous = !state.continuous;
+    if (!state.continuous) state.shuffle = false;
     updatePlayModeButtons();
+    savePlayerState();
     console.log(state.continuous ? '✅ Lecture continue activée' : '❌ Lecture continue désactivée');
 }
 
 // Basculer le mode aléatoire
 async function toggleShuffle() {
+    if (!state.continuous) return;
+
     state.shuffle = !state.shuffle;
     
     // Si on active l'aléatoire et qu'il y a déjà une queue, la mélanger
@@ -1664,6 +1669,7 @@ async function toggleShuffle() {
     }
     
     updatePlayModeButtons();
+    savePlayerState();
 }
 
 // Charger toutes les pistes dans la queue (utilisé au démarrage)
@@ -1711,7 +1717,10 @@ function updatePlayModeButtons() {
     }
     
     if (btnShuffle) {
-        if (state.shuffle) {
+        btnShuffle.disabled = !state.continuous;
+        btnShuffle.title = state.continuous ? '' : 'Activez d’abord la lecture continue';
+
+        if (state.shuffle && state.continuous) {
             btnShuffle.classList.add('btn-active');
         } else {
             btnShuffle.classList.remove('btn-active');
