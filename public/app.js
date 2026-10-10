@@ -184,6 +184,7 @@ function savePlayerState() {
         isPlaying: state.isPlaying,
         repeat: state.repeat,
         shuffle: state.shuffle,
+        continuous: state.continuous,
         currentTime: audioPlayer.currentTime,
         volume: audioPlayer.volume
     };
@@ -201,6 +202,7 @@ async function restorePlayerState() {
             state.currentIndex = playerState.currentIndex || -1;
             state.repeat = playerState.repeat || false;
             state.shuffle = playerState.shuffle || false;
+            state.continuous = playerState.continuous || false;
             
             // Restaurer le volume
             if (playerState.volume !== undefined) {
@@ -253,6 +255,27 @@ const volumeBar = document.getElementById('volumeBar');
 const searchInput = document.getElementById('searchInput');
 const contentView = document.getElementById('content-view');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
+const viewTitle = document.getElementById('viewTitle');
+const viewCount = document.getElementById('viewCount');
+
+const viewTitles = {
+    artists: 'Artistes',
+    albums: 'Albums',
+    tracks: 'Toutes les pistes',
+    playlists: 'Playlists',
+    queue: 'File d’attente',
+    stats: 'Statistiques',
+    scan: 'Scanner',
+    settings: 'Paramètres'
+};
+
+function setViewTitle(title, count = null) {
+    if (viewTitle) viewTitle.textContent = title;
+    if (viewCount) {
+        viewCount.textContent = count === null ? '' : String(count);
+        viewCount.hidden = count === null;
+    }
+}
 
 // Gérer la fin de la piste pour passer à la suivante automatiquement
 audioPlayer.addEventListener('ended', () => {
@@ -418,6 +441,8 @@ function closeMobileMenu() {
 // Chargement des vues
 async function loadView(viewName) {
     state.currentView = viewName;
+    setViewTitle(viewTitles[viewName] || 'Music Server');
+    contentView.scrollTop = 0;
     
     switch(viewName) {
         case 'artists':
@@ -472,12 +497,32 @@ async function loadLibrary() {
     attachTrackListeners();
 }
 
+function attachCardSearch(inputId, cardSelector, title) {
+    const input = document.getElementById(inputId);
+    const cards = [...contentView.querySelectorAll(cardSelector)];
+
+    input.addEventListener('input', () => {
+        const query = input.value.trim().toLocaleLowerCase('fr');
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+            const isVisible = card.textContent.toLocaleLowerCase('fr').includes(query);
+            card.hidden = !isVisible;
+            if (isVisible) visibleCount += 1;
+        });
+
+        setViewTitle(title, visibleCount);
+    });
+}
+
 // Vue artistes
 async function loadArtists() {
     const artists = await fetch(`${API_BASE}/artists`).then(r => r.json());
+    setViewTitle('Artistes', artists.length);
     
     contentView.innerHTML = `
-        <h2 class="section-title">🎤 Artistes (${artists.length})</h2>
+        <input id="artistSearch" class="track-search" type="search"
+               placeholder="🔍 Rechercher un artiste..." aria-label="Rechercher un artiste">
         <div class="grid">
             ${artists.map(artist => `
                 <div class="card" data-artist-id="${artist.id}">
@@ -492,14 +537,17 @@ async function loadArtists() {
     document.querySelectorAll('[data-artist-id]').forEach(card => {
         card.addEventListener('click', () => loadArtistDetail(card.dataset.artistId));
     });
+    attachCardSearch('artistSearch', '[data-artist-id]', 'Artistes');
 }
 
 // Vue albums
 async function loadAlbums() {
     const albums = await fetch(`${API_BASE}/albums`).then(r => r.json());
+    setViewTitle('Albums', albums.length);
     
     contentView.innerHTML = `
-        <h2 class="section-title">💿 Albums (${albums.length})</h2>
+        <input id="albumSearch" class="track-search" type="search"
+               placeholder="🔍 Rechercher un album ou un artiste..." aria-label="Rechercher un album ou un artiste">
         <div class="grid">
             ${albums.map(album => `
                 <div class="card" data-album-id="${album.id}">
@@ -514,6 +562,7 @@ async function loadAlbums() {
     document.querySelectorAll('[data-album-id]').forEach(card => {
         card.addEventListener('click', () => loadAlbumDetail(card.dataset.albumId));
     });
+    attachCardSearch('albumSearch', '[data-album-id]', 'Albums');
 }
 
 // Vue pistes (avec pagination)
@@ -535,35 +584,30 @@ async function loadTracks(page = 1, searchQuery = '') {
     
     const totalPages = searchQuery ? 1 : Math.ceil(total / tracksPerPage);
     const displayedCount = tracks.length;
+    setViewTitle(searchQuery ? 'Résultats de recherche' : 'Toutes les pistes', searchQuery ? displayedCount : total);
     
     contentView.innerHTML = `
-        <h2 class="section-title">🎵 Toutes les pistes ${searchQuery ? '(Recherche)' : `(${total})`}</h2>
-        <div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-            <button id="btnContinuous" class="btn ${state.continuous ? 'btn-active' : ''}" onclick="toggleContinuous()">🔁 Lecture continue</button>
-            <button id="btnShuffle" class="btn ${state.shuffle ? 'btn-active' : ''}" onclick="toggleShuffle()">🎲 Aléatoire</button>
-            ${state.queue.length > 0 ? `<span style="color: #1db954; margin-left: 8px;">📋 ${state.queue.length} pistes en file</span>` : ''}
-        </div>
-        <div style="margin-bottom: 16px;">
-            <input type="text" 
-                   id="trackSearch" 
-                   placeholder="🔍 Rechercher par titre, artiste ou album..." 
-                   value="${searchQuery}"
-                   style="width: 100%; padding: 12px; background: #282828; border: 1px solid #404040; 
-                          border-radius: 4px; color: #fff; font-size: 14px; margin-bottom: 12px;">
-            ${searchQuery ? `
-                <div style="margin-bottom: 12px;">
-                    <span style="color: #1db954; font-weight: bold;">${displayedCount} résultat${displayedCount > 1 ? 's' : ''}</span>
-                    <button class="btn" onclick="loadTracks(1, '')" style="margin-left: 12px; background: #404040;">✕ Effacer</button>
-                </div>
-            ` : ''}
-        </div>
-        ${!searchQuery ? `
-            <div style="margin-bottom: 16px; display: flex; gap: 8px; align-items: center;">
-                <button class="btn" onclick="loadTracks(${Math.max(1, page - 1)}, '')" ${page === 1 ? 'disabled' : ''}>◀ Précédent</button>
-                <span style="color: #888;">Page ${page} sur ${totalPages}</span>
-                <button class="btn" onclick="loadTracks(${Math.min(totalPages, page + 1)}, '')" ${page === totalPages ? 'disabled' : ''}>Suivant ▶</button>
+        <div class="view-sticky-controls">
+            <div class="play-mode-controls">
+                <button id="btnContinuous" class="btn ${state.continuous ? 'btn-active' : ''}" onclick="toggleContinuous()">🔁 Lecture continue</button>
+                <button id="btnShuffle" class="btn ${state.shuffle ? 'btn-active' : ''}" onclick="toggleShuffle()">🎲 Aléatoire</button>
+                ${state.queue.length > 0 ? `<span class="queue-count">📋 ${state.queue.length} pistes en file</span>` : ''}
             </div>
-        ` : ''}
+            <input type="text" id="trackSearch" class="track-search"
+                   placeholder="🔍 Rechercher par titre, artiste ou album..." value="${searchQuery}">
+            ${searchQuery ? `
+                <div class="track-search-result">
+                    <span>${displayedCount} résultat${displayedCount > 1 ? 's' : ''}</span>
+                    <button class="btn" onclick="loadTracks(1, '')">✕ Effacer</button>
+                </div>
+            ` : `
+                <div class="pagination-controls">
+                    <button class="btn" onclick="loadTracks(${Math.max(1, page - 1)}, '')" ${page === 1 ? 'disabled' : ''}>◀ Précédent</button>
+                    <span>Page ${page} sur ${totalPages}</span>
+                    <button class="btn" onclick="loadTracks(${Math.min(totalPages, page + 1)}, '')" ${page === totalPages ? 'disabled' : ''}>Suivant ▶</button>
+                </div>
+            `}
+        </div>
         <div class="track-list">
             ${tracks.map((track, i) => renderTrackItem(track, searchQuery ? i : (page - 1) * tracksPerPage + i)).join('')}
         </div>
@@ -613,6 +657,8 @@ async function loadTracks(page = 1, searchQuery = '') {
 let selectedPlaylistId = null;
 let playlistLibraryTracks = [];
 let playlistTrackSelection = new Set();
+let playlistEditMode = false;
+let playlistEditSelection = new Set();
 
 async function loadPlaylists(playlistId = selectedPlaylistId, searchQuery = '', resetSelection = false) {
     const [playlists, tracksData] = await Promise.all([
@@ -621,6 +667,7 @@ async function loadPlaylists(playlistId = selectedPlaylistId, searchQuery = '', 
             ? Promise.resolve(playlistLibraryTracks)
             : fetch(`${API_BASE}/tracks?page=1&limit=10000`).then(r => r.json())
     ]);
+    setViewTitle('Playlists', playlists.length);
 
     playlistLibraryTracks = Array.isArray(tracksData) ? tracksData : (tracksData.tracks || []);
     if (!playlistId && playlists.length > 0) playlistId = playlists[0].id;
@@ -647,7 +694,6 @@ async function loadPlaylists(playlistId = selectedPlaylistId, searchQuery = '', 
     contentView.innerHTML = `
         <div class="playlist-page-header">
             <div>
-                <h2 class="section-title">📋 Playlists</h2>
                 <p>Sélectionnez une playlist, puis ajoutez-y des pistes depuis la bibliothèque.</p>
             </div>
         </div>
@@ -793,31 +839,45 @@ async function loadPlaylistDetail(playlistId) {
     const data = await fetch(`${API_BASE}/playlists/${playlistId}`).then(r => r.json());
     const playlist = data.playlist || data;
     const tracks = data.tracks || [];
+    selectedPlaylistId = String(playlistId);
+    setViewTitle(playlist.name, tracks.length);
     
     contentView.innerHTML = `
         <div class="playlist-detail-header">
-            <button class="btn" onclick="loadPlaylists()" style="background: #404040;">← Retour</button>
+            <button class="btn" onclick="closePlaylistDetail()" style="background: #404040;">← Retour</button>
             <div class="playlist-detail-actions">
-                <span>${tracks.length} titre${tracks.length !== 1 ? 's' : ''}</span>
+                <button id="btnContinuous" class="btn ${state.continuous ? 'btn-active' : ''}" onclick="toggleContinuous()">🔁 Continue</button>
+                <button id="btnShuffle" class="btn ${state.shuffle ? 'btn-active' : ''}" onclick="toggleShuffle()">🎲 Aléatoire</button>
                 ${tracks.length > 0 ? `
                     <button class="btn" onclick="playPlaylist(${playlistId})">▶️ Tout jouer</button>
                     <button class="btn" onclick="addPlaylistToQueue(${playlistId})" style="background: #404040;">➕ Ajouter à la file</button>
                 ` : ''}
+                <button class="btn" onclick="togglePlaylistEdit(${playlistId})">${playlistEditMode ? '✓ Terminer' : '✏️ Modifier'}</button>
+                <button class="btn btn-danger" onclick="deletePlaylist(${playlistId})">🗑️ Supprimer</button>
             </div>
         </div>
-        <h2 class="section-title">📋 ${playlist.name}</h2>
         ${playlist.description ? `<p style="color: #888; margin: -10px 0 20px 0;">${playlist.description}</p>` : ''}
+        ${playlistEditMode && tracks.length > 0 ? `
+            <div class="playlist-edit-toolbar">
+                <span id="playlistEditCount">${playlistEditSelection.size} sélectionnée${playlistEditSelection.size !== 1 ? 's' : ''}</span>
+                <button class="btn playlist-header-btn" onclick="selectAllPlaylistTracks()">Tous</button>
+                <button class="btn playlist-header-btn" onclick="clearPlaylistTrackSelection()">Aucun</button>
+                <button id="playlistRemoveSelected" class="btn btn-danger playlist-header-btn" onclick="removeSelectedPlaylistTracks(${playlistId})" ${playlistEditSelection.size === 0 ? 'disabled' : ''}>Retirer</button>
+            </div>
+        ` : ''}
         ${tracks.length === 0 ? '<p>Cette playlist est vide. Faites un clic droit sur une piste pour l\'ajouter.</p>' : `
             <div class="track-list playlist-detail-list">
                 <div class="playlist-detail-columns" aria-hidden="true">
                     <span>#</span><span>Titre</span><span>Artiste</span><span>Album</span><span>Durée</span>
                 </div>
                 ${tracks.map((track, i) => `
-                    <div class="track-item playlist-detail-track"
+                    <div class="track-item playlist-detail-track ${playlistEditSelection.has(String(track.id)) ? 'selected' : ''}"
                          data-track-id="${track.id}"
                          ondblclick="playTrackFromPlaylist(${playlistId}, ${i})"
                          oncontextmenu="showPlaylistTrackContextMenu(event, ${playlistId}, ${track.id}); return false;">
-                        <div class="track-number">${i + 1}</div>
+                        ${playlistEditMode
+                            ? `<button class="playlist-track-selector" data-edit-playlist-track="${track.id}" aria-label="Sélectionner cette piste">${playlistEditSelection.has(String(track.id)) ? '✓' : '○'}</button>`
+                            : `<div class="track-number">${i + 1}</div>`}
                         <div class="track-title">${track.file_name || track.title}</div>
                         <div class="track-artist">${track.artist_name}</div>
                         <div class="track-album">${track.album_title}</div>
@@ -827,6 +887,91 @@ async function loadPlaylistDetail(playlistId) {
             </div>
         `}
     `;
+
+    document.querySelectorAll('[data-edit-playlist-track]').forEach(button => {
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            togglePlaylistEditTrack(button.dataset.editPlaylistTrack);
+        });
+    });
+}
+
+function closePlaylistDetail() {
+    playlistEditMode = false;
+    playlistEditSelection.clear();
+    loadPlaylists();
+}
+
+function togglePlaylistEdit(playlistId) {
+    playlistEditMode = !playlistEditMode;
+    playlistEditSelection.clear();
+    loadPlaylistDetail(playlistId);
+}
+
+function togglePlaylistEditTrack(trackId) {
+    if (playlistEditSelection.has(trackId)) {
+        playlistEditSelection.delete(trackId);
+    } else {
+        playlistEditSelection.add(trackId);
+    }
+    updatePlaylistEditControls();
+}
+
+function selectAllPlaylistTracks() {
+    document.querySelectorAll('[data-edit-playlist-track]').forEach(button => {
+        playlistEditSelection.add(button.dataset.editPlaylistTrack);
+    });
+    updatePlaylistEditControls();
+}
+
+function clearPlaylistTrackSelection() {
+    playlistEditSelection.clear();
+    updatePlaylistEditControls();
+}
+
+function updatePlaylistEditControls() {
+    document.querySelectorAll('[data-edit-playlist-track]').forEach(button => {
+        const selected = playlistEditSelection.has(button.dataset.editPlaylistTrack);
+        button.textContent = selected ? '✓' : '○';
+        button.closest('.playlist-detail-track')?.classList.toggle('selected', selected);
+    });
+    const count = playlistEditSelection.size;
+    const countLabel = document.getElementById('playlistEditCount');
+    const removeButton = document.getElementById('playlistRemoveSelected');
+    if (countLabel) countLabel.textContent = `${count} sélectionnée${count !== 1 ? 's' : ''}`;
+    if (removeButton) removeButton.disabled = count === 0;
+}
+
+async function removeSelectedPlaylistTracks(playlistId) {
+    const trackIds = [...playlistEditSelection];
+    if (trackIds.length === 0) return;
+    const confirmed = await showConfirm(`Retirer ${trackIds.length} piste${trackIds.length !== 1 ? 's' : ''} de cette playlist ?`, true);
+    if (!confirmed) return;
+
+    const responses = await Promise.all(trackIds.map(trackId => fetch(`${API_BASE}/playlists/${playlistId}/tracks/${trackId}`, {
+        method: 'DELETE'
+    })));
+    const removedCount = responses.filter(response => response.ok).length;
+    playlistEditSelection.clear();
+    showNotification(`${removedCount} piste${removedCount !== 1 ? 's' : ''} retirée${removedCount !== 1 ? 's' : ''}`, 'success');
+    await loadPlaylistDetail(playlistId);
+}
+
+async function deletePlaylist(playlistId) {
+    const confirmed = await showConfirm('Supprimer cette playlist ? Les pistes resteront dans la bibliothèque.', true);
+    if (!confirmed) return;
+
+    const response = await fetch(`${API_BASE}/playlists/${playlistId}`, { method: 'DELETE' });
+    if (!response.ok) {
+        showNotification('Impossible de supprimer la playlist', 'error');
+        return;
+    }
+    selectedPlaylistId = null;
+    playlistEditMode = false;
+    playlistEditSelection.clear();
+    showNotification('Playlist supprimée', 'success');
+    await loadPlaylists(null, '', true);
+    setViewTitle('Playlists');
 }
 
 // Jouer toute une playlist
@@ -834,7 +979,13 @@ async function playPlaylist(playlistId) {
     const data = await fetch(`${API_BASE}/playlists/${playlistId}`).then(r => r.json());
     const tracks = data.tracks || [];
     if (tracks.length > 0) {
-        state.queue = tracks;
+        state.queue = [...tracks];
+        if (state.shuffle) {
+            for (let i = state.queue.length - 1; i > 0; i--) {
+                const randomIndex = Math.floor(Math.random() * (i + 1));
+                [state.queue[i], state.queue[randomIndex]] = [state.queue[randomIndex], state.queue[i]];
+            }
+        }
         state.currentIndex = 0;
         playFromQueue(0);
     }
@@ -952,11 +1103,13 @@ async function removeFromPlaylist(playlistId, trackId) {
 
 // Vue file d'attente
 async function loadQueue() {
+    setViewTitle('File d’attente', state.queue.length);
     contentView.innerHTML = `
-        <h2 class="section-title">🎼 File d'attente (${state.queue.length} titres)</h2>
+        <div class="view-sticky-controls queue-sticky-header">
+            ${state.queue.length === 0 ? '' : '<button class="btn" onclick="clearQueue()">🗑️ Vider</button>'}
+        </div>
         ${state.queue.length === 0 ? '<p>La file d\'attente est vide</p>' : `
-            <button class="btn" onclick="clearQueue()">🗑️ Vider</button>
-            <div class="track-list">
+            <div class="track-list queue-track-list">
                 ${state.queue.map((track, i) => `
                     <div class="track-item ${i === state.currentIndex ? 'playing' : ''}" data-queue-index="${i}">
                         <div class="track-number">${i + 1}</div>
@@ -989,8 +1142,6 @@ async function loadScan() {
     ]);
     
     contentView.innerHTML = `
-        <h2 class="section-title">🔍 Scanner la bibliothèque</h2>
-        
         <div class="section">
             <h3>Chemins configurés</h3>
             <div id="pathsList" style="margin-bottom: 16px;">
@@ -1188,7 +1339,6 @@ async function loadStats() {
     ]);
     
     contentView.innerHTML = `
-        <h2 class="section-title">📊 Statistiques de la bibliothèque</h2>
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value">${artists.length}</div>
@@ -1209,10 +1359,10 @@ async function loadStats() {
 // Détail artiste
 async function loadArtistDetail(artistId) {
     const data = await fetch(`${API_BASE}/artists/${artistId}`).then(r => r.json());
+    setViewTitle(data.artist.name, data.tracks.length);
     
     contentView.innerHTML = `
         <button class="btn" onclick="loadView('artists')">← Retour</button>
-        <h1>🎤 ${data.artist.name}</h1>
         <button class="btn" onclick="playAllArtist(${artistId})" style="background: #1db954; margin: 16px 0;">▶️ Jouer tout</button>
         <div class="section">
             <h2 class="section-title">Albums</h2>
@@ -1244,10 +1394,10 @@ async function loadArtistDetail(artistId) {
 // Détail album
 async function loadAlbumDetail(albumId) {
     const data = await fetch(`${API_BASE}/albums/${albumId}`).then(r => r.json());
+    setViewTitle(data.album.title, data.tracks.length);
     
     contentView.innerHTML = `
         <button class="btn" onclick="loadView('albums')">← Retour</button>
-        <h1>💿 ${data.album.title}</h1>
         <h3>${data.album.artist_name} • ${data.album.year || '?'}</h3>
         <button class="btn" onclick="playAllAlbum(${albumId})" style="background: #1db954; margin: 16px 0;">▶️ Jouer tout</button>
         <div class="track-list">
@@ -2115,8 +2265,6 @@ async function loadSettings() {
         const data = await response.json();
         
         contentView.innerHTML = `
-            <h2 class="section-title">⚙️ Paramètres</h2>
-            
             <div class="section">
                 <h3>Chemins de musique</h3>
                 <p style="color: #888; font-size: 14px; margin-bottom: 16px;">
