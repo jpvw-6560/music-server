@@ -199,7 +199,7 @@ async function restorePlayerState() {
             const playerState = JSON.parse(savedState);
             state.currentTrack = playerState.currentTrack;
             state.queue = playerState.queue || [];
-            state.currentIndex = playerState.currentIndex || -1;
+            state.currentIndex = playerState.currentIndex ?? -1;
             state.repeat = playerState.repeat || false;
             state.shuffle = playerState.shuffle || false;
             state.continuous = playerState.continuous || false;
@@ -277,40 +277,6 @@ function setViewTitle(title, count = null) {
     }
 }
 
-// Gérer la fin de la piste pour passer à la suivante automatiquement
-audioPlayer.addEventListener('ended', () => {
-    console.log('🎵 Piste terminée, passage à la suivante...');
-    playNext();
-});
-
-function playNext() {
-    // Vérifier si la lecture continue est activée
-    if (!state.continuous) {
-        console.log('⏸ Lecture terminée (mode lecture unique)');
-        state.isPlaying = false;
-        btnPlay.textContent = '▶';
-        return;
-    }
-    
-    // Mode lecture continue activé
-    if (state.currentIndex < state.queue.length - 1) {
-        playFromQueue(state.currentIndex + 1);
-    } else if (state.repeat) {
-        // Si mode répétition, recommencer au début
-        playFromQueue(0);
-    } else {
-        console.log('✅ Fin de la file d\'attente');
-        state.isPlaying = false;
-        btnPlay.textContent = '▶';
-    }
-}
-
-function playPrevious() {
-    if (state.currentIndex > 0) {
-        playFromQueue(state.currentIndex - 1);
-    }
-}
-
 // Initialisation
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🎵 Music Server chargé - Version JS v=3');
@@ -369,7 +335,7 @@ function initEventListeners() {
     // Contrôles lecteur
     btnPlay.addEventListener('click', togglePlay);
     btnPrev.addEventListener('click', playPrevious);
-    btnNext.addEventListener('click', playNext);
+    btnNext.addEventListener('click', () => playNext());
     
     // Progression
     audioPlayer.addEventListener('timeupdate', updateProgress);
@@ -388,7 +354,7 @@ function initEventListeners() {
     });
     
     // Fin de lecture
-    audioPlayer.addEventListener('ended', playNext);
+    audioPlayer.addEventListener('ended', () => playNext(true));
 }
 
 function initFullscreenButton() {
@@ -1503,8 +1469,9 @@ function attachTrackListeners() {
                 return;
             }
             
-            // Si la queue est vide, charger toutes les pistes d'abord
-            if (state.queue.length === 0) {
+            // Depuis la bibliothèque, suivre l'ordre complet affiché plutôt
+            // qu'une éventuelle ancienne file restaurée.
+            if (state.currentView === 'tracks' || state.queue.length === 0) {
                 await loadAllTracksToQueue();
             }
             
@@ -1701,9 +1668,13 @@ async function toggleShuffle() {
 
 // Charger toutes les pistes dans la queue (utilisé au démarrage)
 async function loadAllTracksToQueue() {
-    const url = `${API_BASE}/tracks?page=1&limit=10000`;
-    const data = await fetch(url).then(r => r.json());
-    const tracks = Array.isArray(data) ? data : (data.tracks || []);
+    if (allLibraryTracks.length === 0) {
+        const url = `${API_BASE}/tracks?page=1&limit=10000`;
+        const data = await fetch(url).then(r => r.json());
+        allLibraryTracks = Array.isArray(data) ? data : (data.tracks || []);
+    }
+
+    const tracks = allLibraryTracks;
     
     if (tracks.length === 0) {
         console.log('⚠️ Aucune piste à charger');
@@ -1711,8 +1682,6 @@ async function loadAllTracksToQueue() {
     }
     
     state.queue = [...tracks];
-    allLibraryTracks = [...tracks];
-    
     if (state.shuffle) {
         // Mélanger la queue
         for (let i = state.queue.length - 1; i > 0; i--) {
@@ -1807,7 +1776,20 @@ function playPrevious() {
     }
 }
 
-function playNext() {
+function playNext(isAutomatic = false) {
+    if (isAutomatic && !state.continuous) {
+        console.log('⏸ Lecture terminée (mode lecture unique)');
+        state.isPlaying = false;
+        btnPlay.textContent = '▶';
+        return;
+    }
+
+    if (state.queue.length === 0) {
+        state.isPlaying = false;
+        btnPlay.textContent = '▶';
+        return;
+    }
+
     if (state.shuffle) {
         // Mode aléatoire
         const randomIndex = Math.floor(Math.random() * state.queue.length);
@@ -1817,6 +1799,10 @@ function playNext() {
     } else if (state.repeat) {
         // Recommencer au début si répétition activée
         playFromQueue(0);
+    } else {
+        console.log('✅ Fin de la file d\'attente');
+        state.isPlaying = false;
+        btnPlay.textContent = '▶';
     }
 }
 
