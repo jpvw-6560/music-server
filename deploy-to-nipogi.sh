@@ -41,4 +41,4 @@ docker-compose ps
 ENDSSH
 
 echo "✅ Déploiement terminé !"
-echo "🌐 Accessible sur http://100.84.222.62:3011/"
+echo "🌐 Accessible sur https://nipogi-srv.tail6394b2.ts.net:3011/"
