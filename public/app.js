@@ -287,11 +287,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Restaurer l'état du lecteur
     await restorePlayerState();
     
-    loadView('tracks');
+    await loadView('tracks');
+
+    if (state.continuous && state.currentTrack) {
+        await updateTrackListHighlight();
+    }
+
     audioPlayer.volume = volumeBar.value / 100;
     
     // Sauvegarder avant de fermer la page
     window.addEventListener('beforeunload', () => {
+        savePlayerState();
+    });
+    window.addEventListener('pagehide', () => {
         savePlayerState();
     });
 });
