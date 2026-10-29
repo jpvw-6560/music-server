@@ -18,6 +18,8 @@ rsync -avz --exclude 'node_modules' --exclude '.git' \
 # 2. Se connecter et reconstruire le conteneur Docker
 echo "🐳 Reconstruction du conteneur Docker..."
 ssh ${REMOTE_USER}@${REMOTE_HOST} << 'ENDSSH'
+set -e
+
 cd /home/jpvw/docker-apps/music_server
 
 # Arrêter et supprimer l'ancien conteneur

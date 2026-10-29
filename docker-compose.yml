@@ -6,7 +6,7 @@ services:
     container_name: music_server
     restart: unless-stopped
     ports:
-      - "3011:3001"
+      - "127.0.0.1:3011:3001"
     volumes:
       - /home/jpvw/Musique:/music:ro
       - /mnt/seagate:/seagate:ro
